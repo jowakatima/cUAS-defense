@@ -1,0 +1,12 @@
+{
+  "name": "tower-defense-game",
+  "version": "1.0.0",
+  "description": "A tower defense game where you defend against various drone types",
+  "main": "index.html",
+  "scripts": {
+    "start": "http-server -c-1 -p 8080"
+  },
+  "dependencies": {
+    "http-server": "^14.1.1"
+  }
+} 

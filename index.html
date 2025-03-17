@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>cUAS Defense - Tower Defense Game</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+    <!-- Load P5.js from CDN with a more recent version -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -14,14 +15,60 @@
             align-items: center;
             height: 100vh;
             background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
         }
         canvas {
             display: block;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
         }
+        #p5_loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            font-size: 24px;
+            color: #333;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            margin: 20px auto;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #09f;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
+    <!-- P5.js automatically looks for this element to show loading status -->
+    <div id="p5_loading">
+        <div>Loading Game...</div>
+        <div class="spinner"></div>
+        <div id="loading-status">Initializing...</div>
+    </div>
+    
+    <!-- Add a script to handle loading errors -->
+    <script>
+        window.addEventListener('error', function(e) {
+            console.error('Error caught:', e.error);
+            document.getElementById('loading-status').textContent = 'Error loading game. Check console for details.';
+        });
+        
+        // Fallback if game doesn't load within 10 seconds
+        setTimeout(function() {
+            if (document.getElementById('p5_loading').style.display !== 'none') {
+                document.getElementById('loading-status').textContent = 
+                    'Game is taking longer than expected to load. Try refreshing the page.';
+            }
+        }, 10000);
+    </script>
+    
+    <!-- Load the game script -->
     <script src="sketch.js"></script>
 </body>
 </html>

@@ -19,6 +19,7 @@ In this tower defense game, you'll defend against different types of unmanned ae
 2. Use number keys 1-4 to select different tower types
 3. Survive all waves to win
 4. If an enemy reaches the end of the path, it's game over
+5. Press 'i' to toggle between drawn sprites and image sprites
 
 ## Enemy Types
 
@@ -26,6 +27,24 @@ In this tower defense game, you'll defend against different types of unmanned ae
 - **FPV**: Fast but fragile racing drone
 - **Group 3**: Stealthy flying wing with increased health
 - **Group 5**: Heavy, armored boss-type enemy
+
+## Custom Sprites
+
+You can add custom sprites for enemies and towers by placing image files in the `images/` directory:
+
+### Enemy Images
+- `images/enemy_fixed_wing.png`
+- `images/enemy_fpv.png`
+- `images/enemy_group_3.png`
+- `images/enemy_group_5.png`
+
+### Tower Images
+- `images/tower_basic.png`
+- `images/tower_sniper.png`
+- `images/tower_rapid.png`
+- `images/tower_splash.png`
+
+If an image is not found, the game will automatically fall back to using the programmatically drawn sprites.
 
 ## Development
 

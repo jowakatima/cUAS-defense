@@ -45,6 +45,62 @@ let gameStats = {
   gameTime: 0
 };
 
+// Image storage objects
+let enemyImages = {};
+let towerImages = {};
+let useImages = true; // Flag to enable/disable image usage
+
+// Preload function to load images before setup
+function preload() {
+  // Load enemy images if they exist
+  for (let type in enemyTypes) {
+    let imagePath = `images/enemy_${type}.png`;
+    // Use a try-catch approach with loadImage
+    try {
+      loadImage(
+        imagePath,
+        // Success callback
+        img => { 
+          console.log(`Loaded enemy image: ${imagePath}`);
+          enemyImages[type] = img; 
+        },
+        // Error callback - silently fail and use drawn sprites instead
+        () => { 
+          console.log(`Enemy image not found: ${imagePath}, using drawn sprite`);
+          // Don't throw an error, just continue
+        }
+      );
+    } catch (e) {
+      console.log(`Error loading enemy image: ${imagePath}`, e);
+      // Continue execution even if image loading fails
+    }
+  }
+  
+  // Load tower images if they exist
+  for (let type in towerTypes) {
+    let imagePath = `images/tower_${type}.png`;
+    // Use a try-catch approach with loadImage
+    try {
+      loadImage(
+        imagePath,
+        // Success callback
+        img => { 
+          console.log(`Loaded tower image: ${imagePath}`);
+          towerImages[type] = img; 
+        },
+        // Error callback - silently fail and use drawn sprites instead
+        () => { 
+          console.log(`Tower image not found: ${imagePath}, using drawn sprite`);
+          // Don't throw an error, just continue
+        }
+      );
+    } catch (e) {
+      console.log(`Error loading tower image: ${imagePath}`, e);
+      // Continue execution even if image loading fails
+    }
+  }
+}
+
 // Setup function to initialize the game
 function setup() {
   // Make canvas fill the smaller of window width or height, maintaining square shape
@@ -524,6 +580,12 @@ function keyPressed() {
       console.log("Unit test: Enemy placed near end of path");
     }
   }
+  
+  // 'i' key to toggle image usage
+  if (key === 'i') {
+    useImages = !useImages;
+    console.log(`Image usage ${useImages ? 'enabled' : 'disabled'}`);
+  }
 }
 
 // Reset the game to initial state
@@ -672,8 +734,10 @@ class Enemy {
     
     if (millis() - this.hitTime < 100) {
       fill(255, 165, 0); // Orange when hit
+      tint(255, 165, 0); // Orange tint for images when hit
     } else {
       fill(this.color);
+      tint(255); // Normal tint for images
     }
     
     // Get the angle for rotation, safely handling the case when targetIndex is out of bounds
@@ -688,270 +752,295 @@ class Enemy {
       angle = atan2(lastPoint.y - secondLastPoint.y, lastPoint.x - secondLastPoint.x);
     }
     
-    if (this.type === 'fixed_wing') {
-      // Fixed-wing drone design (top-down view)
-      push();
-      // Apply the calculated angle
-      rotate(angle + PI/2); // Rotate 90 degrees so nose faces direction of travel
+    // Check if we have an image for this enemy type
+    if (useImages && enemyImages[this.type] && enemyImages[this.type].width > 0) {
+      // Use the loaded image
+      imageMode(CENTER);
       
-      let droneSize = this.size * scaleFactor;
-      
-      // Main wings (thinner with slight sweep)
-      fill(245); // Light gray for wings
-      beginShape();
-      // Left wing
-      vertex(-droneSize * 1.2, 0);           // Wing tip
-      vertex(-droneSize * 1.1, -droneSize * 0.15); // Leading edge
-      vertex(-droneSize * 0.25, -droneSize * 0.15); // Wing root
-      vertex(-droneSize * 0.2, 0);          // Trailing edge root
-      vertex(-droneSize * 1.0, droneSize * 0.2);  // Trailing edge tip
-      endShape(CLOSE);
-      
-      // Right wing (mirror of left)
-      beginShape();
-      vertex(droneSize * 1.2, 0);            // Wing tip
-      vertex(droneSize * 1.1, -droneSize * 0.15);  // Leading edge
-      vertex(droneSize * 0.25, -droneSize * 0.15);  // Wing root
-      vertex(droneSize * 0.2, 0);           // Trailing edge root
-      vertex(droneSize * 1.0, droneSize * 0.2);   // Trailing edge tip
-      endShape(CLOSE);
-      
-      // Central fuselage (slightly thicker)
-      fill(235); // Slightly darker for body
-      // Main body
-      rect(-droneSize * 0.2, -droneSize * 0.8, droneSize * 0.4, droneSize * 1.4, droneSize * 0.1);
-      
-      // Nose cone
-      fill(220);
-      arc(0, -droneSize * 0.8, droneSize * 0.4, droneSize * 0.25, PI, TWO_PI);
-      
-      // Propeller animation (faster rotation)
-      push();
-      translate(0, -droneSize * 0.8);
-      rotate(frameCount * 1.5); // Increased rotation speed
-      fill(40);
-      // Thinner propeller blades
-      rect(-droneSize * 0.8, -droneSize * 0.03, droneSize * 1.6, droneSize * 0.06);
-      rect(-droneSize * 0.03, -droneSize * 0.8, droneSize * 0.06, droneSize * 1.6);
-      // Hub
-      fill(30);
-      circle(0, 0, droneSize * 0.1);
-      pop();
-      
-      // Tail section
-      fill(245);
-      // Vertical stabilizer (taller, thinner)
-      beginShape();
-      vertex(0, droneSize * 0.5);          // Base
-      vertex(0, droneSize * 0.7);          // Top
-      vertex(droneSize * 0.15, droneSize * 0.5); // Back
-      endShape(CLOSE);
-      
-      // Equipment and details
-      // Camera/sensor housing (center underside)
-      fill(40);
-      ellipse(0, 0, droneSize * 0.25, droneSize * 0.15);
-      // Sensor lens
-      fill(20);
-      circle(0, 0, droneSize * 0.1);
-      
-      // Navigation lights
-      fill(255, 0, 0, 200); // Red light (left)
-      circle(-droneSize * 1.1, 0, droneSize * 0.06);
-      fill(0, 255, 0, 200); // Green light (right)
-      circle(droneSize * 1.1, 0, droneSize * 0.06);
-      
-      // Wing details
-      stroke(200);
-      strokeWeight(droneSize * 0.02);
-      // Control surfaces
-      line(-droneSize * 0.9, droneSize * 0.1, -droneSize * 0.4, droneSize * 0.05);
-      line(droneSize * 0.4, droneSize * 0.05, droneSize * 0.9, droneSize * 0.1);
-      noStroke();
-      
-      // Solar panels or sensor arrays on wings (thinner)
-      fill(30, 30, 50, 100);
-      rect(-droneSize * 0.8, -droneSize * 0.1, droneSize * 0.2, droneSize * 0.15);
-      rect(droneSize * 0.6, -droneSize * 0.1, droneSize * 0.2, droneSize * 0.15);
-      
-      pop();
-    } 
-    else if (this.type === 'fpv') {
-      // FPV Drone design
-      push();
-      // Apply the calculated angle
-      rotate(angle + PI/4); // Rotate 45 degrees to make it diamond-shaped
-      
-      // Scale all sizes by scaleFactor
-      let droneSize = this.size * scaleFactor;
-      
-      // Main body - X frame
-      fill(40); // Dark gray for frame
-      // Draw X frame using two rectangles
-      rect(-droneSize/2, -droneSize/8, droneSize, droneSize/4); // Horizontal arm
-      rect(-droneSize/8, -droneSize/2, droneSize/4, droneSize); // Vertical arm
-      
-      // Center hub
-      fill(60);
-      circle(0, 0, droneSize/2);
-      
-      // Flight controller with LED
-      fill(20);
-      rect(-droneSize/6, -droneSize/6, droneSize/3, droneSize/3);
-      // LED indicator
-      fill(255, 0, 0);
-      circle(0, 0, droneSize/6);
-      
-      // Propellers - spinning animation
-      fill(100);
-      let propTime = frameCount * 0.5;
-      for (let i = 0; i < 4; i++) {
+      // Apply special handling for fpv type
+      if (this.type === 'fpv') {
+        // Don't rotate the fpv image
+        let imgSize = this.size * 10; // 5x larger in each dimension
+        image(enemyImages[this.type], 0, 0, imgSize, imgSize);
+      } else if (this.type === 'fixed_wing') {
+        // Special handling for fixed_wing type
+        // Rotate 180 degrees to face forward + direction of travel
+        rotate(angle + PI*1.5);
+        let imgSize = this.size * 6; // 3x larger in each dimension
+        image(enemyImages[this.type], 0, 0, imgSize, imgSize);
+      } else {
+        // Rotate other enemy types to face direction of travel
+        rotate(angle + PI/2);
+        let imgSize = this.size * 2; // Normal size for other enemy types
+        image(enemyImages[this.type], 0, 0, imgSize, imgSize);
+      }
+    } else {
+      // Fallback to drawing the enemy
+      if (this.type === 'fixed_wing') {
+        // Fixed-wing drone design (top-down view)
         push();
-        translate(cos(i * PI/2) * droneSize/2, sin(i * PI/2) * droneSize/2);
-        rotate(propTime + i * PI/2);
-        // Draw propeller blades
-        ellipse(0, 0, droneSize/3, droneSize/20);
-        ellipse(0, 0, droneSize/20, droneSize/3);
-        // Propeller hub
+        // Apply the calculated angle
+        rotate(angle + PI/2); // Rotate 90 degrees so nose faces direction of travel
+        
+        let droneSize = this.size * scaleFactor;
+        
+        // Main wings (thinner with slight sweep)
+        fill(245); // Light gray for wings
+        beginShape();
+        // Left wing
+        vertex(-droneSize * 1.2, 0);           // Wing tip
+        vertex(-droneSize * 1.1, -droneSize * 0.15); // Leading edge
+        vertex(-droneSize * 0.25, -droneSize * 0.15); // Wing root
+        vertex(-droneSize * 0.2, 0);          // Trailing edge root
+        vertex(-droneSize * 1.0, droneSize * 0.2);  // Trailing edge tip
+        endShape(CLOSE);
+        
+        // Right wing (mirror of left)
+        beginShape();
+        vertex(droneSize * 1.2, 0);            // Wing tip
+        vertex(droneSize * 1.1, -droneSize * 0.15);  // Leading edge
+        vertex(droneSize * 0.25, -droneSize * 0.15);  // Wing root
+        vertex(droneSize * 0.2, 0);           // Trailing edge root
+        vertex(droneSize * 1.0, droneSize * 0.2);   // Trailing edge tip
+        endShape(CLOSE);
+        
+        // Central fuselage (slightly thicker)
+        fill(235); // Slightly darker for body
+        // Main body
+        rect(-droneSize * 0.2, -droneSize * 0.8, droneSize * 0.4, droneSize * 1.4, droneSize * 0.1);
+        
+        // Nose cone
+        fill(220);
+        arc(0, -droneSize * 0.8, droneSize * 0.4, droneSize * 0.25, PI, TWO_PI);
+        
+        // Propeller animation (faster rotation)
+        push();
+        translate(0, -droneSize * 0.8);
+        rotate(frameCount * 1.5); // Increased rotation speed
+        fill(40);
+        // Thinner propeller blades
+        rect(-droneSize * 0.8, -droneSize * 0.03, droneSize * 1.6, droneSize * 0.06);
+        rect(-droneSize * 0.03, -droneSize * 0.8, droneSize * 0.06, droneSize * 1.6);
+        // Hub
         fill(30);
-        circle(0, 0, droneSize/10);
+        circle(0, 0, droneSize * 0.1);
+        pop();
+        
+        // Tail section
+        fill(245);
+        // Vertical stabilizer (taller, thinner)
+        beginShape();
+        vertex(0, droneSize * 0.5);          // Base
+        vertex(0, droneSize * 0.7);          // Top
+        vertex(droneSize * 0.15, droneSize * 0.5); // Back
+        endShape(CLOSE);
+        
+        // Equipment and details
+        // Camera/sensor housing (center underside)
+        fill(40);
+        ellipse(0, 0, droneSize * 0.25, droneSize * 0.15);
+        // Sensor lens
+        fill(20);
+        circle(0, 0, droneSize * 0.1);
+        
+        // Navigation lights
+        fill(255, 0, 0, 200); // Red light (left)
+        circle(-droneSize * 1.1, 0, droneSize * 0.06);
+        fill(0, 255, 0, 200); // Green light (right)
+        circle(droneSize * 1.1, 0, droneSize * 0.06);
+        
+        // Wing details
+        stroke(200);
+        strokeWeight(droneSize * 0.02);
+        // Control surfaces
+        line(-droneSize * 0.9, droneSize * 0.1, -droneSize * 0.4, droneSize * 0.05);
+        line(droneSize * 0.4, droneSize * 0.05, droneSize * 0.9, droneSize * 0.1);
+        noStroke();
+        
+        // Solar panels or sensor arrays on wings (thinner)
+        fill(30, 30, 50, 100);
+        rect(-droneSize * 0.8, -droneSize * 0.1, droneSize * 0.2, droneSize * 0.15);
+        rect(droneSize * 0.6, -droneSize * 0.1, droneSize * 0.2, droneSize * 0.15);
+        
+        pop();
+      } 
+      else if (this.type === 'fpv') {
+        // FPV Drone design
+        push();
+        // Apply the calculated angle
+        rotate(angle + PI/4); // Rotate 45 degrees to make it diamond-shaped
+        
+        // Scale all sizes by scaleFactor
+        let droneSize = this.size * scaleFactor;
+        
+        // Main body - X frame
+        fill(40); // Dark gray for frame
+        // Draw X frame using two rectangles
+        rect(-droneSize/2, -droneSize/8, droneSize, droneSize/4); // Horizontal arm
+        rect(-droneSize/8, -droneSize/2, droneSize/4, droneSize); // Vertical arm
+        
+        // Center hub
+        fill(60);
+        circle(0, 0, droneSize/2);
+        
+        // Flight controller with LED
+        fill(20);
+        rect(-droneSize/6, -droneSize/6, droneSize/3, droneSize/3);
+        // LED indicator
+        fill(255, 0, 0);
+        circle(0, 0, droneSize/6);
+        
+        // Propellers - spinning animation
+        fill(100);
+        let propTime = frameCount * 0.5;
+        for (let i = 0; i < 4; i++) {
+          push();
+          translate(cos(i * PI/2) * droneSize/2, sin(i * PI/2) * droneSize/2);
+          rotate(propTime + i * PI/2);
+          // Draw propeller blades
+          ellipse(0, 0, droneSize/3, droneSize/20);
+          ellipse(0, 0, droneSize/20, droneSize/3);
+          // Propeller hub
+          fill(30);
+          circle(0, 0, droneSize/10);
+          pop();
+        }
+        
+        // FPV Camera housing
+        fill(30);
+        rect(-droneSize/4, -droneSize/4, droneSize/2, droneSize/3);
+        // Camera lens
+        fill(0);
+        circle(0, -droneSize/6, droneSize/4);
+        // Camera tilt
+        stroke(30);
+        strokeWeight(droneSize/16);
+        line(-droneSize/4, -droneSize/6, droneSize/4, -droneSize/6);
+        noStroke();
+        
         pop();
       }
-      
-      // FPV Camera housing
-      fill(30);
-      rect(-droneSize/4, -droneSize/4, droneSize/2, droneSize/3);
-      // Camera lens
-      fill(0);
-      circle(0, -droneSize/6, droneSize/4);
-      // Camera tilt
-      stroke(30);
-      strokeWeight(droneSize/16);
-      line(-droneSize/4, -droneSize/6, droneSize/4, -droneSize/6);
-      noStroke();
-      
-      pop();
-    }
-    else if (this.type === 'group_3') {
-      // Flying wing stealth design
-      push();
-      // Apply the calculated angle
-      rotate(angle + PI/2);
-      
-      let droneSize = this.size * scaleFactor;
-      
-      // Main wing body (dark gray with slight metallic tint)
-      fill(40, 45, 50);
-      beginShape();
-      // Center point (nose)
-      vertex(0, -droneSize * 0.8);
-      // Right wing
-      vertex(droneSize * 1.3, droneSize * 0.4);
-      // Right wing tip
-      vertex(droneSize * 1.1, droneSize * 0.5);
-      // Rear edge right
-      vertex(droneSize * 0.3, droneSize * 0.2);
-      // Center rear
-      vertex(0, droneSize * 0.4);
-      // Rear edge left
-      vertex(-droneSize * 0.3, droneSize * 0.2);
-      // Left wing tip
-      vertex(-droneSize * 1.1, droneSize * 0.5);
-      // Left wing
-      vertex(-droneSize * 1.3, droneSize * 0.4);
-      endShape(CLOSE);
-      
-      // Surface detail lines (showing panel sections)
-      stroke(60, 65, 70);
-      strokeWeight(droneSize * 0.02);
-      // Wing panel lines
-      line(-droneSize * 0.9, droneSize * 0.2, -droneSize * 0.2, -droneSize * 0.3);
-      line(droneSize * 0.9, droneSize * 0.2, droneSize * 0.2, -droneSize * 0.3);
-      // Center body lines
-      line(-droneSize * 0.2, -droneSize * 0.3, 0, -droneSize * 0.6);
-      line(droneSize * 0.2, -droneSize * 0.3, 0, -droneSize * 0.6);
-      noStroke();
-      
-      // Engine intakes (darker recessed areas)
-      fill(30, 35, 40);
-      // Left intake
-      beginShape();
-      vertex(-droneSize * 0.8, droneSize * 0.2);
-      vertex(-droneSize * 0.6, droneSize * 0.1);
-      vertex(-droneSize * 0.4, droneSize * 0.15);
-      vertex(-droneSize * 0.6, droneSize * 0.25);
-      endShape(CLOSE);
-      // Right intake
-      beginShape();
-      vertex(droneSize * 0.8, droneSize * 0.2);
-      vertex(droneSize * 0.6, droneSize * 0.1);
-      vertex(droneSize * 0.4, droneSize * 0.15);
-      vertex(droneSize * 0.6, droneSize * 0.25);
-      endShape(CLOSE);
-      
-      // Sensor arrays and equipment
-      fill(20, 25, 30);
-      // Central sensor dome
-      ellipse(0, -droneSize * 0.3, droneSize * 0.3, droneSize * 0.2);
-      // Wing sensors
-      circle(-droneSize * 0.9, droneSize * 0.1, droneSize * 0.15);
-      circle(droneSize * 0.9, droneSize * 0.1, droneSize * 0.15);
-      
-      // Stealth coating patterns (subtle angular sections)
-      fill(45, 50, 55, 100);
-      beginShape();
-      vertex(-droneSize * 0.6, 0);
-      vertex(-droneSize * 0.3, -droneSize * 0.2);
-      vertex(0, 0);
-      vertex(-droneSize * 0.4, droneSize * 0.2);
-      endShape(CLOSE);
-      beginShape();
-      vertex(droneSize * 0.6, 0);
-      vertex(droneSize * 0.3, -droneSize * 0.2);
-      vertex(0, 0);
-      vertex(droneSize * 0.4, droneSize * 0.2);
-      endShape(CLOSE);
-      
-      // Navigation lights (very subtle due to stealth)
-      fill(255, 0, 0, 50); // Dim red
-      circle(-droneSize * 1.1, droneSize * 0.3, droneSize * 0.08);
-      fill(0, 255, 0, 50); // Dim green
-      circle(droneSize * 1.1, droneSize * 0.3, droneSize * 0.08);
-      
-      // Exhaust ports (subtle glow effect)
-      fill(60, 60, 60, 100);
-      rect(-droneSize * 0.5, droneSize * 0.3, droneSize * 0.2, droneSize * 0.08, droneSize * 0.04);
-      rect(droneSize * 0.3, droneSize * 0.3, droneSize * 0.2, droneSize * 0.08, droneSize * 0.04);
-      // Exhaust glow
-      fill(80, 80, 80, 50);
-      rect(-droneSize * 0.45, droneSize * 0.32, droneSize * 0.15, droneSize * 0.04, droneSize * 0.02);
-      rect(droneSize * 0.35, droneSize * 0.32, droneSize * 0.15, droneSize * 0.04, droneSize * 0.02);
-      
-      pop();
-    }
-    else if (this.type === 'group_5') {
-      // Intimidating boss design
-      fill(50); // Dark gray
-      // Main body - larger pentagon
-      beginShape();
-      vertex(0, -this.size/1.5); // Top
-      vertex(this.size/1.5, -this.size/3); // Upper right
-      vertex(this.size/2, this.size/2); // Lower right
-      vertex(-this.size/2, this.size/2); // Lower left
-      vertex(-this.size/1.5, -this.size/3); // Upper left
-      endShape(CLOSE);
-      // Armor plates
-      fill(70);
-      rect(-this.size/2, 0, this.size, this.size/4);
-      rect(-this.size/3, -this.size/2, this.size/1.5, this.size/4);
-      // Glowing eyes
-      fill(255, 0, 0);
-      circle(-this.size/4, -this.size/3, this.size/4);
-      circle(this.size/4, -this.size/3, this.size/4);
-      // Inner glow
-      fill(255, 100, 100);
-      circle(-this.size/4, -this.size/3, this.size/8);
-      circle(this.size/4, -this.size/3, this.size/8);
+      else if (this.type === 'group_3') {
+        // Flying wing stealth design
+        push();
+        // Apply the calculated angle
+        rotate(angle + PI/2);
+        
+        let droneSize = this.size * scaleFactor;
+        
+        // Main wing body (dark gray with slight metallic tint)
+        fill(40, 45, 50);
+        beginShape();
+        // Center point (nose)
+        vertex(0, -droneSize * 0.8);
+        // Right wing
+        vertex(droneSize * 1.3, droneSize * 0.4);
+        // Right wing tip
+        vertex(droneSize * 1.1, droneSize * 0.5);
+        // Rear edge right
+        vertex(droneSize * 0.3, droneSize * 0.2);
+        // Center rear
+        vertex(0, droneSize * 0.4);
+        // Rear edge left
+        vertex(-droneSize * 0.3, droneSize * 0.2);
+        // Left wing tip
+        vertex(-droneSize * 1.1, droneSize * 0.5);
+        // Left wing
+        vertex(-droneSize * 1.3, droneSize * 0.4);
+        endShape(CLOSE);
+        
+        // Surface detail lines (showing panel sections)
+        stroke(60, 65, 70);
+        strokeWeight(droneSize * 0.02);
+        // Wing panel lines
+        line(-droneSize * 0.9, droneSize * 0.2, -droneSize * 0.2, -droneSize * 0.3);
+        line(droneSize * 0.9, droneSize * 0.2, droneSize * 0.2, -droneSize * 0.3);
+        // Center body lines
+        line(-droneSize * 0.2, -droneSize * 0.3, 0, -droneSize * 0.6);
+        line(droneSize * 0.2, -droneSize * 0.3, 0, -droneSize * 0.6);
+        noStroke();
+        
+        // Engine intakes (darker recessed areas)
+        fill(30, 35, 40);
+        // Left intake
+        beginShape();
+        vertex(-droneSize * 0.8, droneSize * 0.2);
+        vertex(-droneSize * 0.6, droneSize * 0.1);
+        vertex(-droneSize * 0.4, droneSize * 0.15);
+        vertex(-droneSize * 0.6, droneSize * 0.25);
+        endShape(CLOSE);
+        // Right intake
+        beginShape();
+        vertex(droneSize * 0.8, droneSize * 0.2);
+        vertex(droneSize * 0.6, droneSize * 0.1);
+        vertex(droneSize * 0.4, droneSize * 0.15);
+        vertex(droneSize * 0.6, droneSize * 0.25);
+        endShape(CLOSE);
+        
+        // Sensor arrays and equipment
+        fill(20, 25, 30);
+        // Central sensor dome
+        ellipse(0, -droneSize * 0.3, droneSize * 0.3, droneSize * 0.2);
+        // Wing sensors
+        circle(-droneSize * 0.9, droneSize * 0.1, droneSize * 0.15);
+        circle(droneSize * 0.9, droneSize * 0.1, droneSize * 0.15);
+        
+        // Stealth coating patterns (subtle angular sections)
+        fill(45, 50, 55, 100);
+        beginShape();
+        vertex(-droneSize * 0.6, 0);
+        vertex(-droneSize * 0.3, -droneSize * 0.2);
+        vertex(0, 0);
+        vertex(-droneSize * 0.4, droneSize * 0.2);
+        endShape(CLOSE);
+        beginShape();
+        vertex(droneSize * 0.6, 0);
+        vertex(droneSize * 0.3, -droneSize * 0.2);
+        vertex(0, 0);
+        vertex(droneSize * 0.4, droneSize * 0.2);
+        endShape(CLOSE);
+        
+        // Navigation lights (very subtle due to stealth)
+        fill(255, 0, 0, 50); // Dim red
+        circle(-droneSize * 1.1, droneSize * 0.3, droneSize * 0.08);
+        fill(0, 255, 0, 50); // Dim green
+        circle(droneSize * 1.1, droneSize * 0.3, droneSize * 0.08);
+        
+        // Exhaust ports (subtle glow effect)
+        fill(60, 60, 60, 100);
+        rect(-droneSize * 0.5, droneSize * 0.3, droneSize * 0.2, droneSize * 0.08, droneSize * 0.04);
+        rect(droneSize * 0.3, droneSize * 0.3, droneSize * 0.2, droneSize * 0.08, droneSize * 0.04);
+        // Exhaust glow
+        fill(80, 80, 80, 50);
+        rect(-droneSize * 0.45, droneSize * 0.32, droneSize * 0.15, droneSize * 0.04, droneSize * 0.02);
+        rect(droneSize * 0.35, droneSize * 0.32, droneSize * 0.15, droneSize * 0.04, droneSize * 0.02);
+        
+        pop();
+      }
+      else if (this.type === 'group_5') {
+        // Intimidating boss design
+        fill(50); // Dark gray
+        // Main body - larger pentagon
+        beginShape();
+        vertex(0, -this.size/1.5); // Top
+        vertex(this.size/1.5, -this.size/3); // Upper right
+        vertex(this.size/2, this.size/2); // Lower right
+        vertex(-this.size/2, this.size/2); // Lower left
+        vertex(-this.size/1.5, -this.size/3); // Upper left
+        endShape(CLOSE);
+        // Armor plates
+        fill(70);
+        rect(-this.size/2, 0, this.size, this.size/4);
+        rect(-this.size/3, -this.size/2, this.size/1.5, this.size/4);
+        // Glowing eyes
+        fill(255, 0, 0);
+        circle(-this.size/4, -this.size/3, this.size/4);
+        circle(this.size/4, -this.size/3, this.size/4);
+        // Inner glow
+        fill(255, 100, 100);
+        circle(-this.size/4, -this.size/3, this.size/8);
+        circle(this.size/4, -this.size/3, this.size/8);
+      }
     }
     
     // Health bar
@@ -1031,69 +1120,78 @@ class Tower {
     push(); // Save drawing state
     translate(this.pos.x, this.pos.y);
     
-    if (this.type === 'basic') {
-      // Basic cannon design
-      // Base
-      fill(0, 0, 200);
-      circle(0, 0, this.size);
-      // Turret
-      fill(0, 0, 255);
-      rect(-this.size/4, -this.size/3, this.size/2, this.size/1.5);
-      // Barrel
-      fill(50);
-      rect(-this.size/6, -this.size/2, this.size/3, this.size/3);
-    } 
-    else if (this.type === 'sniper') {
-      // Sniper tower design
-      // Base
-      fill(128, 0, 0);
-      circle(0, 0, this.size * 0.8);
-      // Tower body
-      fill(160, 0, 0);
-      rect(-this.size/3, -this.size/2, this.size/1.5, this.size/1.2);
-      // Long barrel
-      fill(50);
-      rect(-this.size/6, -this.size, this.size/3, this.size/1.2);
-      // Scope
-      fill(70);
-      circle(0, -this.size/1.2, this.size/4);
-    }
-    else if (this.type === 'rapid') {
-      // Rapid-fire tower design
-      // Rotating base
-      fill(0, 128, 128);
-      circle(0, 0, this.size * 0.7);
-      // Multiple barrels that rotate
-      fill(0, 160, 160);
-      for (let i = 0; i < 4; i++) {
-        push();
-        rotate(i * PI/2 + frameCount/10);
-        rect(-this.size/8, -this.size/2, this.size/4, this.size/2);
-        pop();
+    // Check if we have an image for this tower type
+    if (useImages && towerImages[this.type]) {
+      // Use the loaded image
+      imageMode(CENTER);
+      let imgSize = this.size * 1.2; // Adjust size as needed
+      image(towerImages[this.type], 0, 0, imgSize, imgSize);
+    } else {
+      // Fallback to drawing the tower
+      if (this.type === 'basic') {
+        // Basic cannon design
+        // Base
+        fill(0, 0, 200);
+        circle(0, 0, this.size);
+        // Turret
+        fill(0, 0, 255);
+        rect(-this.size/4, -this.size/3, this.size/2, this.size/1.5);
+        // Barrel
+        fill(50);
+        rect(-this.size/6, -this.size/2, this.size/3, this.size/3);
+      } 
+      else if (this.type === 'sniper') {
+        // Sniper tower design
+        // Base
+        fill(128, 0, 0);
+        circle(0, 0, this.size * 0.8);
+        // Tower body
+        fill(160, 0, 0);
+        rect(-this.size/3, -this.size/2, this.size/1.5, this.size/1.2);
+        // Long barrel
+        fill(50);
+        rect(-this.size/6, -this.size, this.size/3, this.size/1.2);
+        // Scope
+        fill(70);
+        circle(0, -this.size/1.2, this.size/4);
       }
-      // Center hub
-      fill(0, 200, 200);
-      circle(0, 0, this.size * 0.3);
-    }
-    else if (this.type === 'splash') {
-      // Splash tower design
-      // Base
-      fill(128, 0, 128);
-      circle(0, 0, this.size * 0.8);
-      // Energy orb effect with pulsing
-      let pulseSize = sin(frameCount/10) * 0.1 + 1;
-      fill(200, 100, 200, 150);
-      circle(0, 0, this.size * 0.6 * pulseSize);
-      fill(255, 150, 255, 150);
-      circle(0, 0, this.size * 0.4 * pulseSize);
-      // Emitter arrays
-      fill(160, 0, 160);
-      for (let i = 0; i < 3; i++) {
-        push();
-        rotate(i * TWO_PI/3);
-        rect(-this.size/8, -this.size/2, this.size/4, this.size/3);
-        circle(0, -this.size/2, this.size/4);
-        pop();
+      else if (this.type === 'rapid') {
+        // Rapid-fire tower design
+        // Rotating base
+        fill(0, 128, 128);
+        circle(0, 0, this.size * 0.7);
+        // Multiple barrels that rotate
+        fill(0, 160, 160);
+        for (let i = 0; i < 4; i++) {
+          push();
+          rotate(i * PI/2 + frameCount/10);
+          rect(-this.size/8, -this.size/2, this.size/4, this.size/2);
+          pop();
+        }
+        // Center hub
+        fill(0, 200, 200);
+        circle(0, 0, this.size * 0.3);
+      }
+      else if (this.type === 'splash') {
+        // Splash tower design
+        // Base
+        fill(128, 0, 128);
+        circle(0, 0, this.size * 0.8);
+        // Energy orb effect with pulsing
+        let pulseSize = sin(frameCount/10) * 0.1 + 1;
+        fill(200, 100, 200, 150);
+        circle(0, 0, this.size * 0.6 * pulseSize);
+        fill(255, 150, 255, 150);
+        circle(0, 0, this.size * 0.4 * pulseSize);
+        // Emitter arrays
+        fill(160, 0, 160);
+        for (let i = 0; i < 3; i++) {
+          push();
+          rotate(i * TWO_PI/3);
+          rect(-this.size/8, -this.size/2, this.size/4, this.size/3);
+          circle(0, -this.size/2, this.size/4);
+          pop();
+        }
       }
     }
     

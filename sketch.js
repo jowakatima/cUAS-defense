@@ -1,7 +1,6 @@
 // Global variables
 let grid = [];
-let path = [];
-let pathCenters = [];
+let base = { x: 0, y: 0, size: 0, health: 100, maxHealth: 100 }; // Base that enemies will target
 let enemies = [];
 let towers = [];
 let projectiles = [];
@@ -22,11 +21,18 @@ let gridSize = 25;
 let baseSize = 20; // Base unit for scaling
 let cellSize; // Will be calculated based on window size
 let scaleFactor; // Global scale factor for all visual elements
+
+// Sniper tower on base variables
+let baseTower = null; // Will hold the sniper tower placed on the base
+let missiles = 0; // Number of missiles available for the base tower
+let missilePrice = 25; // Cost per missile
+let selectedEnemy = null; // Currently selected enemy for targeting
+
 let towerTypes = {
-  basic: { name: 'Basic Tower', cost: 50, damage: 5, range: 60, attackSpeed: 800, color: [0, 0, 255] },
-  sniper: { name: 'Sniper Tower', cost: 100, damage: 15, range: 100, attackSpeed: 1500, color: [128, 0, 0] },
+  basic: { name: 'Jamming Tower', cost: 50, damage: 1, range: 60 * 2, attackSpeed: 300, color: [0, 0, 255] },
+  sniper: { name: 'Sniper Tower', cost: 100, damage: 15, range: 100 * 3, attackSpeed: 1500, color: [128, 0, 0] },
   rapid: { name: 'Rapid Tower', cost: 75, damage: 2, range: 48, attackSpeed: 300, color: [0, 128, 128] },
-  splash: { name: 'Splash Tower', cost: 125, damage: 3, range: 52, attackSpeed: 1000, color: [128, 0, 128], splashRadius: 16 }
+  splash: { name: 'Splash Tower', cost: 125, damage: 3, range: 52, attackSpeed: 1000, color: [128, 0, 128], splashRadius: 16 * 3 }
 };
 let enemyTypes = {
   'fixed_wing': { speedMod: 1.0, healthMod: 1.0, sizeMod: 1.0, color: [255, 0, 0], shape: 'rect', value: 1.0 },
@@ -119,23 +125,33 @@ function setup() {
     }
   }
 
-  // Define the enemy path
-  path = [
-    [0, 10], [1, 10], [2, 10], [3, 10], [4, 10], [5, 10], [6, 10], [7, 10], [8, 10], [9, 10],
-    [9, 11], [9, 12], [9, 13], [9, 14], [9, 15],
-    [10, 15], [11, 15], [12, 15], [13, 15], [14, 15], [15, 15],
-    [15, 16], [15, 17], [15, 18], [15, 19],
-    [16, 19], [17, 19], [18, 19], [19, 19], [20, 19], [21, 19], [22, 19], [23, 19], [24, 19]
-  ];
+  // Set up the base on the right side in the middle
+  base.x = width * 0.9;
+  base.y = height * 0.5;
+  base.size = cellSize * 2;
+  base.health = 100;
+  base.maxHealth = 100;
 
-  // Mark path cells and calculate centers
-  pathCenters = [];
-  for (let p of path) {
-    grid[p[0]][p[1]] = 'path';
-    let x = p[0] * cellSize + cellSize/2;
-    let y = p[1] * cellSize + cellSize/2;
-    pathCenters.push(createVector(x, y));
+  // Mark the base position in the grid
+  let baseGridX = floor(base.x / cellSize);
+  let baseGridY = floor(base.y / cellSize);
+  
+  // Mark base area as occupied in the grid
+  for (let i = -1; i <= 1; i++) {
+    for (let j = -1; j <= 1; j++) {
+      let gridX = baseGridX + i;
+      let gridY = baseGridY + j;
+      if (gridX >= 0 && gridX < gridSize && gridY >= 0 && gridY < gridSize) {
+        grid[gridX][gridY] = 'base';
+      }
+    }
   }
+  
+  // Create the sniper tower on the base
+  baseTower = new BaseTower(base.x, base.y);
+  
+  // Start with 5 missiles
+  missiles = 5;
 
   lastSpawnTime = millis();
   gameStats.startTime = millis();
@@ -150,13 +166,10 @@ function windowResized() {
   cellSize = size / gridSize;
   scaleFactor = cellSize / baseSize;
   
-  // Recalculate path centers
-  pathCenters = [];
-  for (let p of path) {
-    let x = p[0] * cellSize + cellSize/2;
-    let y = p[1] * cellSize + cellSize/2;
-    pathCenters.push(createVector(x, y));
-  }
+  // Update base position
+  base.x = width * 0.9;
+  base.y = height * 0.5;
+  base.size = cellSize * 2;
 
   // Update positions of existing entities
   for (let tower of towers) {
@@ -301,13 +314,13 @@ function draw() {
 
   background(220); // Light gray background
 
-  // **Draw the grid**
+  // Draw the grid
   for (let i = 0; i < gridSize; i++) {
     for (let j = 0; j < gridSize; j++) {
       let x = i * cellSize;
       let y = j * cellSize;
-      if (grid[i][j] === 'path') {
-        fill(100); // Dark gray for path
+      if (grid[i][j] === 'base') {
+        fill(100, 100, 200); // Blue for base
       } else if (grid[i][j] === 'empty') {
         fill(0, 255, 0); // Green for empty cells
       } else if (grid[i][j] === 'tower') {
@@ -317,15 +330,19 @@ function draw() {
     }
   }
 
-  // **Draw path lines**
-  stroke(0);
-  for (let i = 0; i < pathCenters.length - 1; i++) {
-    line(pathCenters[i].x, pathCenters[i].y, pathCenters[i + 1].x, pathCenters[i + 1].y);
+  // Draw the base
+  drawBase();
+  
+  // Draw the base tower
+  if (baseTower) {
+    baseTower.draw();
   }
-  noStroke();
 
   // **Handle wave logic**
   if (!waveInProgress && currentWave <= maxWaves) {
+    // Display missile purchase interface before starting the wave
+    displayMissilePurchaseUI();
+    
     // Display "Start Wave" button
     fill(0, 100, 255);
     rect(width / 2 - 75, height - 50, 150, 40);
@@ -365,10 +382,33 @@ function draw() {
     enemy.update();
     enemy.draw();
     
-    // Check if enemy reached the end
-    if (enemy.targetIndex >= pathCenters.length) {
-      gameOver = true;
-      break;
+    // Highlight selected enemy
+    if (selectedEnemy === enemy) {
+      push();
+      noFill();
+      stroke(255, 0, 0);
+      strokeWeight(2);
+      circle(enemy.pos.x, enemy.pos.y, enemy.size * 2.5);
+      pop();
+    }
+    
+    // Check if enemy reached the base
+    if (enemy.checkBaseCollision()) {
+      base.health -= 10; // Damage the base
+      enemies.splice(i, 1); // Remove the enemy
+      
+      // Reset selected enemy if it was removed
+      if (selectedEnemy === enemy) {
+        selectedEnemy = null;
+        if (baseTower) {
+          baseTower.targeting = false;
+        }
+      }
+      
+      if (base.health <= 0) {
+        gameOver = true;
+        break;
+      }
     }
   }
 
@@ -387,20 +427,65 @@ function draw() {
     // Check for collision with enemies
     if (proj.checkCollision()) {
       projectiles.splice(i, 1); // Remove projectile after hit
+      
+      // Reset selected enemy if it was destroyed
+      if (selectedEnemy && selectedEnemy.health <= 0) {
+        selectedEnemy = null;
+        if (baseTower) {
+          baseTower.targeting = false;
+        }
+      }
     }
   }
 
-  // **Highlight cell under mouse for tower placement**
+  // **Highlight cell under mouse for tower placement and show tower preview**
   let mx = floor(mouseX / cellSize);
   let my = floor(mouseY / cellSize);
-  if (mx >= 0 && mx < gridSize && my >= 0 && my < gridSize && grid[mx][my] === 'empty') {
-    // Only highlight if we have enough money
-    if (money >= towerTypes[selectedTowerType].cost) {
-    fill(255, 255, 0, 100); // Semi-transparent yellow
-    } else {
-      fill(255, 0, 0, 100); // Semi-transparent red if can't afford
+  
+  // Only show tower placement preview if not in targeting mode
+  if (!baseTower || !baseTower.targeting) {
+    if (mx >= 0 && mx < gridSize && my >= 0 && my < gridSize && grid[mx][my] === 'empty') {
+      // Only highlight if we have enough money
+      if (money >= towerTypes[selectedTowerType].cost) {
+        fill(255, 255, 0, 100); // Semi-transparent yellow
+      } else {
+        fill(255, 0, 0, 100); // Semi-transparent red if can't afford
+      }
+      rect(mx * cellSize, my * cellSize, cellSize, cellSize);
+      
+      // Show tower preview
+      let previewX = mx * cellSize + cellSize/2;
+      let previewY = my * cellSize + cellSize/2;
+      drawTowerPreview(previewX, previewY, selectedTowerType);
     }
-    rect(mx * cellSize, my * cellSize, cellSize, cellSize);
+  } 
+  // Show targeting mode indicator
+  else if (baseTower && baseTower.targeting) {
+    // Draw a targeting cursor
+    push();
+    noFill();
+    stroke(255, 0, 0);
+    strokeWeight(2);
+    line(mouseX - 10, mouseY, mouseX + 10, mouseY);
+    line(mouseX, mouseY - 10, mouseX, mouseY + 10);
+    noFill();
+    stroke(255, 0, 0, 150);
+    strokeWeight(1);
+    ellipse(mouseX, mouseY, 30, 30);
+    pop();
+    
+    // Draw a more prominent message
+    fill(255, 0, 0);
+    stroke(0);
+    strokeWeight(1);
+    textAlign(CENTER);
+    textSize(16);
+    text("TARGETING MODE - Click enemy to fire missile", width / 2, height - 20);
+    // Draw a red overlay around the screen edges to indicate special mode
+    noFill();
+    stroke(255, 0, 0, 100);
+    strokeWeight(5);
+    rect(2, 2, width-4, height-4);
   }
   
   // Display game info
@@ -409,13 +494,190 @@ function draw() {
   textAlign(LEFT);
   text(`Money: $${money}`, 10, 20);
   text(`Wave: ${currentWave}/${maxWaves}`, 10, 40);
+  text(`Missiles: ${missiles}`, 10, 60);
   
   if (waveInProgress) {
-    text(`Enemies: ${enemies.length + enemiesToSpawn}`, 10, 60);
+    text(`Enemies: ${enemies.length + enemiesToSpawn}`, 10, 80);
   }
   
   // Draw tower selection UI
   drawTowerSelectionUI();
+  
+  // Only show the space key hint when not in targeting mode
+  if (baseTower && missiles > 0 && !waveInProgress && !baseTower.targeting) {
+    fill(100, 100, 255);
+    textAlign(CENTER);
+    textSize(14);
+    text("Press SPACE to enter missile targeting mode", width / 2, height - 80);
+  }
+  
+  // Other targeting instructions are now handled in the tower preview section
+}
+
+// Display interface for purchasing missiles
+function displayMissilePurchaseUI() {
+  let boxWidth = 200;
+  let boxHeight = 150;
+  let boxX = width / 2 - boxWidth / 2;
+  let boxY = height / 3 - boxHeight / 2;
+  
+  // Background
+  fill(50, 50, 80, 220);
+  rect(boxX, boxY, boxWidth, boxHeight, 10);
+  
+  // Title
+  textAlign(CENTER);
+  fill(255);
+  textSize(18);
+  text("Missile Purchase", width / 2, boxY + 25);
+  
+  // Info text
+  textSize(14);
+  text(`Current Missiles: ${missiles}`, width / 2, boxY + 50);
+  text(`Cost: $${missilePrice} each`, width / 2, boxY + 70);
+  
+  // Buy 1 button
+  let button1X = boxX + 40;
+  let buttonY = boxY + 100;
+  let buttonWidth = 50;
+  let buttonHeight = 30;
+  
+  if (money >= missilePrice) {
+    fill(0, 150, 0);
+  } else {
+    fill(100, 100, 100);
+  }
+  rect(button1X, buttonY, buttonWidth, buttonHeight, 5);
+  fill(255);
+  text("Buy 1", button1X + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
+  
+  // Buy 5 button
+  let button5X = boxX + boxWidth - 40 - buttonWidth;
+  
+  if (money >= missilePrice * 5) {
+    fill(0, 150, 0);
+  } else {
+    fill(100, 100, 100);
+  }
+  rect(button5X, buttonY, buttonWidth, buttonHeight, 5);
+  fill(255);
+  text("Buy 5", button5X + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
+}
+
+// Function to draw tower preview
+function drawTowerPreview(x, y, towerType) {
+  let towerData = towerTypes[towerType];
+  
+  push(); // Save drawing state
+  translate(x, y);
+  
+  // Draw range indicator with animation
+  noFill();
+  stroke(towerData.color[0], towerData.color[1], towerData.color[2], 100 + 50 * sin(frameCount * 0.1));
+  strokeWeight(2);
+  circle(0, 0, towerData.range * 2);
+  
+  // Draw splash radius for splash tower
+  if (towerType === 'splash' && towerData.splashRadius) {
+    stroke(towerData.color[0], towerData.color[1], towerData.color[2], 50 + 20 * sin(frameCount * 0.1));
+    strokeWeight(1);
+    circle(0, 0, towerData.splashRadius * 2);
+  }
+  
+  strokeWeight(1);
+  
+  // Semi-transparent tower preview
+  if (useImages && towerImages[towerType]) {
+    // Use the loaded image with transparency
+    imageMode(CENTER);
+    let imgSize = cellSize * 0.6 * 1.2; // Adjust size as needed
+    tint(255, 180); // Semi-transparent
+    image(towerImages[towerType], 0, 0, imgSize, imgSize);
+  } else {
+    // Fallback to drawing the tower with transparency
+    if (towerType === 'basic') {
+      // Jamming tower design
+      // Base
+      fill(0, 0, 200, 180);
+      circle(0, 0, cellSize * 0.6);
+      // Antenna structure
+      fill(0, 0, 255, 180);
+      rect(-cellSize * 0.05, -cellSize * 0.4, cellSize * 0.1, cellSize * 0.4);
+      // Dish
+      fill(120, 120, 255, 180);
+      arc(0, -cellSize * 0.4, cellSize * 0.3, cellSize * 0.3, PI, TWO_PI);
+      // Signal waves
+      noFill();
+      stroke(0, 0, 255, 100 + 80 * sin(frameCount * 0.2));
+      arc(0, -cellSize * 0.4, cellSize * 0.5, cellSize * 0.5, -PI/4, PI/4);
+      arc(0, -cellSize * 0.4, cellSize * 0.7, cellSize * 0.7, -PI/5, PI/5);
+      noStroke();
+    } 
+    else if (towerType === 'sniper') {
+      // Sniper tower design
+      // Base
+      fill(128, 0, 0, 180);
+      circle(0, 0, cellSize * 0.48);
+      // Tower body
+      fill(160, 0, 0, 180);
+      rect(-cellSize * 0.2, -cellSize * 0.3, cellSize * 0.4, cellSize * 0.3);
+      // Long barrel
+      fill(50, 50, 50, 180);
+      rect(-cellSize * 0.1, -cellSize * 0.6, cellSize * 0.2, cellSize * 0.3);
+      // Scope
+      fill(70, 70, 70, 180);
+      circle(0, -cellSize * 0.7, cellSize * 0.15);
+    }
+    else if (towerType === 'rapid') {
+      // Rapid-fire tower design
+      // Rotating base
+      fill(0, 128, 128, 180);
+      circle(0, 0, cellSize * 0.42);
+      // Multiple barrels that rotate
+      fill(0, 160, 160, 180);
+      for (let i = 0; i < 4; i++) {
+        push();
+        rotate(i * PI/2 + frameCount/10);
+        rect(-cellSize * 0.05, -cellSize * 0.3, cellSize * 0.1, cellSize * 0.3);
+        pop();
+      }
+      // Center hub
+      fill(0, 200, 200, 180);
+      circle(0, 0, cellSize * 0.18);
+    }
+    else if (towerType === 'splash') {
+      // Splash tower design
+      // Base
+      fill(128, 0, 128, 180);
+      circle(0, 0, cellSize * 0.48);
+      // Energy orb effect with pulsing
+      let pulseSize = sin(frameCount/10) * 0.1 + 1;
+      fill(200, 100, 200, 100);
+      circle(0, 0, cellSize * 0.36 * pulseSize);
+      fill(255, 150, 255, 100);
+      circle(0, 0, cellSize * 0.24 * pulseSize);
+      // Emitter arrays
+      fill(160, 0, 160, 180);
+      for (let i = 0; i < 3; i++) {
+        push();
+        rotate(i * TWO_PI/3);
+        rect(-cellSize * 0.05, -cellSize * 0.3, cellSize * 0.1, cellSize * 0.18);
+        circle(0, -cellSize * 0.3, cellSize * 0.12);
+        pop();
+      }
+    }
+  }
+  
+  // Add a "Preview" text above
+  fill(0);
+  stroke(255);
+  strokeWeight(2);
+  textAlign(CENTER);
+  textSize(cellSize * 0.2);
+  text("PREVIEW", 0, -cellSize * 0.8);
+  
+  noStroke();
+  pop(); // Restore drawing state
 }
 
 // Draw the tower selection UI
@@ -426,9 +688,17 @@ function drawTowerSelectionUI() {
   let boxWidth = 90;
   let boxHeight = 20;
   
+  // Count how many tower types we're showing (excluding sniper)
+  let visibleTowerCount = 0;
+  for (let type in towerTypes) {
+    if (type !== 'sniper') {
+      visibleTowerCount++;
+    }
+  }
+  
   // Background for tower selection area
   fill(200, 200, 200, 200);
-  rect(startX - 5, startY - 5, boxWidth + 10, (Object.keys(towerTypes).length * spacing) + 10);
+  rect(startX - 5, startY - 5, boxWidth + 10, (visibleTowerCount * spacing) + 10);
   
   textAlign(LEFT);
   textSize(10);
@@ -437,6 +707,11 @@ function drawTowerSelectionUI() {
   
   let index = 0;
   for (let type in towerTypes) {
+    // Skip the sniper tower in selection
+    if (type === 'sniper') {
+      continue;
+    }
+    
     let tower = towerTypes[type];
     let y = startY + 15 + (index * spacing);
     
@@ -457,10 +732,6 @@ function drawTowerSelectionUI() {
     // Scaled tower icons
     if (type === 'basic') {
       circle(startX + 10, y + boxHeight/2, 12);
-    } else if (type === 'sniper') {
-      circle(startX + 10, y + boxHeight/2, 10);
-      fill(50);
-      rect(startX + 7, y + boxHeight/2 - 2, 6, 4);
     } else if (type === 'rapid') {
       circle(startX + 10, y + boxHeight/2, 8);
       fill(0, 200, 200);
@@ -481,10 +752,18 @@ function drawTowerSelectionUI() {
     fill(0);
     textSize(8);
     text(`${tower.name} [$${tower.cost}]`, startX + 20, y + 8);
-    text(`DMG: ${tower.damage} [${index + 1}]`, startX + 20, y + 16);
+    
+    // Update the keyboard shortcut number for each tower type
+    let keyNumber = index + 1;
+    text(`DMG: ${tower.damage} [${keyNumber}]`, startX + 20, y + 16);
     
     index++;
   }
+  
+  // Add instructions for missile targeting
+  fill(200, 0, 0);
+  textSize(8);
+  text("Press SPACE for missile targeting", startX, startY + 15 + (visibleTowerCount * spacing) + 5);
   
   strokeWeight(1);
   noStroke();
@@ -514,7 +793,74 @@ function mousePressed() {
     return;
   }
   
-  // Check for tower selection UI clicks
+  // Check for missile purchase buttons click
+  if (!waveInProgress) {
+    let boxWidth = 200;
+    let boxHeight = 150;
+    let boxX = width / 2 - boxWidth / 2;
+    let boxY = height / 3 - boxHeight / 2;
+    let buttonWidth = 50;
+    let buttonHeight = 30;
+    let button1X = boxX + 40;
+    let button5X = boxX + boxWidth - 40 - buttonWidth;
+    let buttonY = boxY + 100;
+    
+    // Buy 1 missile
+    if (mouseX > button1X && mouseX < button1X + buttonWidth &&
+        mouseY > buttonY && mouseY < buttonY + buttonHeight) {
+      if (money >= missilePrice) {
+        money -= missilePrice;
+        missiles += 1;
+      }
+      return;
+    }
+    
+    // Buy 5 missiles
+    if (mouseX > button5X && mouseX < button5X + buttonWidth &&
+        mouseY > buttonY && mouseY < buttonY + buttonHeight) {
+      if (money >= missilePrice * 5) {
+        money -= missilePrice * 5;
+        missiles += 5;
+      }
+      return;
+    }
+  }
+  
+  // Check for direct enemy targeting if we have missiles and are in targeting mode
+  if (baseTower && missiles > 0 && baseTower.targeting) {
+    // Check if any enemy is clicked
+    for (let enemy of enemies) {
+      let d = dist(mouseX, mouseY, enemy.pos.x, enemy.pos.y);
+      if (d < enemy.size * 1.5) {
+        // Fire directly at the clicked enemy
+        baseTower.launchMissile(enemy);
+        return;
+      }
+    }
+    
+    // If in targeting mode and clicked on base tower, exit targeting mode
+    let d = dist(mouseX, mouseY, baseTower.pos.x, baseTower.pos.y);
+    if (d < baseTower.size) {
+      baseTower.targeting = false; // Toggle targeting mode off
+      selectedEnemy = null; // Clear any selected enemy
+      return;
+    }
+    
+    // If in targeting mode and clicked elsewhere, don't exit - stay in targeting mode
+    return;
+  }
+  
+  // Start targeting mode when clicking on the base tower (if not already targeting)
+  if (baseTower && missiles > 0 && !baseTower.targeting) {
+    let d = dist(mouseX, mouseY, baseTower.pos.x, baseTower.pos.y);
+    if (d < baseTower.size) {
+      baseTower.targeting = true; // Enter targeting mode
+      selectedEnemy = null; // Clear any selected enemy
+      return;
+    }
+  }
+  
+  // Tower selection UI clicks
   let startX = width - 140;
   let startY = 30;
   let spacing = 35;
@@ -523,44 +869,82 @@ function mousePressed() {
   
   let index = 0;
   for (let type in towerTypes) {
+    // Skip the sniper tower in selection
+    if (type === 'sniper') {
+      continue;
+    }
+    
     let y = startY + (index * spacing);
     
     if (mouseX >= startX && mouseX <= startX + boxWidth && 
         mouseY >= y && mouseY <= y + boxHeight) {
       selectedTowerType = type;
+      // Exit targeting mode if we select a tower
+      if (baseTower) {
+        baseTower.targeting = false;
+      }
       return;
     }
     
     index++;
   }
 
-  // Handle tower placement
-  let mx = floor(mouseX / cellSize);
-  let my = floor(mouseY / cellSize);
-  if (mx >= 0 && mx < gridSize && my >= 0 && my < gridSize && grid[mx][my] === 'empty') {
-    // Check if we have enough money
-    let towerType = towerTypes[selectedTowerType];
-    if (money >= towerType.cost) {
-      let x = mx * cellSize + cellSize/2; // Center of the cell
-      let y = my * cellSize + cellSize/2;
-      let tower = new Tower(x, y, selectedTowerType);
-      towers.push(tower);
-      grid[mx][my] = 'tower';
-      money -= towerType.cost; // Deduct the cost
-      gameStats.towersBuilt++; // Track tower built
+  // Only place towers if not in targeting mode
+  if (!baseTower || !baseTower.targeting) {
+    // Handle tower placement
+    let mx = floor(mouseX / cellSize);
+    let my = floor(mouseY / cellSize);
+    if (mx >= 0 && mx < gridSize && my >= 0 && my < gridSize && grid[mx][my] === 'empty') {
+      // Check if we have enough money
+      let towerType = towerTypes[selectedTowerType];
+      if (money >= towerType.cost) {
+        // Ensure we're not too close to the base
+        let baseGridX = floor(base.x / cellSize);
+        let baseGridY = floor(base.y / cellSize);
+        let tooCloseToBase = (mx >= baseGridX - 1 && mx <= baseGridX + 1 && 
+                            my >= baseGridY - 1 && my <= baseGridY + 1);
+        
+        if (!tooCloseToBase) {
+          let x = mx * cellSize + cellSize/2; // Center of the cell
+          let y = my * cellSize + cellSize/2;
+          let tower = new Tower(x, y, selectedTowerType);
+          towers.push(tower);
+          grid[mx][my] = 'tower';
+          money -= towerType.cost; // Deduct the cost
+          gameStats.towersBuilt++; // Track tower built
+        }
+      }
     }
   }
 }
 
 // Handle keyboard shortcuts for tower selection
 function keyPressed() {
-  // Number keys 1-4 for tower selection
-  if (key >= '1' && key <= '4') {
-    let index = parseInt(key) - 1;
-    let types = Object.keys(towerTypes);
-    if (index < types.length) {
-      selectedTowerType = types[index];
+  // Number keys 1-3 for tower selection
+  if (key === '1') {
+    selectedTowerType = 'basic';
+    // Exit targeting mode when selecting a tower
+    if (baseTower) {
+      baseTower.targeting = false;
     }
+  } else if (key === '2') {
+    selectedTowerType = 'rapid';
+    // Exit targeting mode when selecting a tower
+    if (baseTower) {
+      baseTower.targeting = false;
+    }
+  } else if (key === '3') {
+    selectedTowerType = 'splash';
+    // Exit targeting mode when selecting a tower
+    if (baseTower) {
+      baseTower.targeting = false;
+    }
+  }
+  
+  // Space key to toggle missile targeting mode
+  if (key === ' ' && baseTower && missiles > 0) {
+    baseTower.targeting = !baseTower.targeting;
+    selectedEnemy = null;
   }
   
   // 'q' key for unit testing game over logic
@@ -568,17 +952,13 @@ function keyPressed() {
     // Create a test enemy and place it at the end of the path
     let testEnemy = new Enemy(currentWave, 'fixed_wing');
     
-    // Position it at the second-to-last path point
-    if (pathCenters.length >= 2) {
-      let secondLastIndex = pathCenters.length - 2;
-      testEnemy.pos = pathCenters[secondLastIndex].copy();
-      testEnemy.targetIndex = secondLastIndex + 1;
-      
-      // Add the test enemy to the enemies array
-      enemies.push(testEnemy);
-      
-      console.log("Unit test: Enemy placed near end of path");
-    }
+    // Position it near the base
+    testEnemy.pos = createVector(base.x - 100, base.y);
+    
+    // Add the test enemy to the enemies array
+    enemies.push(testEnemy);
+    
+    console.log("Unit test: Enemy placed near base");
   }
   
   // 'i' key to toggle image usage
@@ -601,6 +981,8 @@ function resetGame() {
   gameOver = false;
   money = 200;
   selectedTowerType = 'basic';
+  missiles = 5; // Reset missiles to starting amount
+  selectedEnemy = null;
   
   // Reset game statistics
   gameStats = {
@@ -620,10 +1002,22 @@ function resetGame() {
     }
   }
   
-  // Mark path cells in the grid
-  for (let p of path) {
-    grid[p[0]][p[1]] = 'path';
+  // Mark base area in the grid and recreate base tower
+  let baseGridX = floor(base.x / cellSize);
+  let baseGridY = floor(base.y / cellSize);
+  
+  for (let i = -1; i <= 1; i++) {
+    for (let j = -1; j <= 1; j++) {
+      let gridX = baseGridX + i;
+      let gridY = baseGridY + j;
+      if (gridX >= 0 && gridX < gridSize && gridY >= 0 && gridY < gridSize) {
+        grid[gridX][gridY] = 'base';
+      }
+    }
   }
+  
+  // Recreate the base tower
+  baseTower = new BaseTower(base.x, base.y);
 }
 
 // **Spawn a new enemy**
@@ -684,8 +1078,8 @@ function spawnEnemy() {
 // **Enemy class**
 class Enemy {
   constructor(wave, type) {
-    this.pos = createVector(pathCenters[0].x, pathCenters[0].y);
-    this.targetIndex = 1;
+    // Spawn on the left side of the screen at random height
+    this.pos = createVector(0, random(height * 0.1, height * 0.9));
     this.type = type;
     
     let enemyData = enemyTypes[type];
@@ -708,24 +1102,23 @@ class Enemy {
   }
 
   update() {
-    if (this.targetIndex < pathCenters.length) {
-      let target = pathCenters[this.targetIndex];
-      let dir = p5.Vector.sub(target, this.pos);
-      let distance = dir.mag();
-      let moveAmount = this.speed * (deltaTime / 1000);
-      if (distance < moveAmount) {
-        this.pos.set(target);
-        this.targetIndex++;
-      } else {
-        dir.normalize().mult(moveAmount);
-        this.pos.add(dir);
-      }
-    }
+    // Move directly toward the base
+    let target = createVector(base.x, base.y);
+    let dir = p5.Vector.sub(target, this.pos);
+    let distance = dir.mag();
+    let moveAmount = this.speed * (deltaTime / 1000);
     
-    // Check if enemy reached the end of the path
-    if (this.targetIndex >= pathCenters.length) {
-      gameOver = true;
+    // Only move if not already at the base
+    if (distance > this.size + base.size/2) {
+      dir.normalize().mult(moveAmount);
+      this.pos.add(dir);
     }
+  }
+
+  // Check if enemy has collided with the base
+  checkBaseCollision() {
+    let d = dist(this.pos.x, this.pos.y, base.x, base.y);
+    return d < (this.size + base.size/2);
   }
 
   draw() {
@@ -740,17 +1133,8 @@ class Enemy {
       tint(255); // Normal tint for images
     }
     
-    // Get the angle for rotation, safely handling the case when targetIndex is out of bounds
-    let angle = 0;
-    if (this.targetIndex < pathCenters.length) {
-      angle = atan2(pathCenters[this.targetIndex].y - this.pos.y, 
-                    pathCenters[this.targetIndex].x - this.pos.x);
-    } else if (this.targetIndex > 0 && pathCenters.length > 1) {
-      // If we're at the end, use the angle from the last two path points
-      let lastPoint = pathCenters[pathCenters.length - 1];
-      let secondLastPoint = pathCenters[pathCenters.length - 2];
-      angle = atan2(lastPoint.y - secondLastPoint.y, lastPoint.x - secondLastPoint.x);
-    }
+    // Get the angle for rotation - now pointing toward the base
+    let angle = atan2(base.y - this.pos.y, base.x - this.pos.x);
     
     // Check if we have an image for this enemy type
     if (useImages && enemyImages[this.type] && enemyImages[this.type].width > 0) {
@@ -1050,7 +1434,7 @@ class Enemy {
     fill(0, 0, 0);
     rect(-this.size/2, barYOffset, this.size, barHeight);
     // Green health bar
-    fill(0, 255, 0);
+    fill(map(this.health, 0, this.maxHealth, 255, 0), map(this.health, 0, this.maxHealth, 0, 255), 0);
     let healthWidth = map(this.health, 0, this.maxHealth, 0, this.size);
     rect(-this.size/2, barYOffset, healthWidth, barHeight);
     
@@ -1075,38 +1459,99 @@ class Tower {
     this.splashRadius = towerData.splashRadius || 0;
     this.lastShot = 0;
     this.size = cellSize * 0.6; // Scale tower size with cell size
+    
+    // Track affected enemies for the jamming tower
+    this.jammingTargets = [];
   }
 
   update() {
-    if (millis() - this.lastShot > this.attackSpeed) {
-      let target = null;
+    if (this.type === 'basic') { // Jamming tower behavior
+      // Clear old targets that are no longer valid
+      this.jammingTargets = this.jammingTargets.filter(target => 
+        enemies.includes(target) && 
+        p5.Vector.dist(this.pos, target.pos) < this.range);
       
-      // Different targeting strategies based on tower type
-      if (this.type === 'sniper') {
-        // Sniper targets the enemy with the highest health
-        let maxHealth = -1;
-        for (let enemy of enemies) {
-          let d = p5.Vector.dist(this.pos, enemy.pos);
-          if (d < this.range && enemy.health > maxHealth) {
-            maxHealth = enemy.health;
-            target = enemy;
-          }
-        }
-      } else {
-        // Other towers target the closest enemy
-      let minDist = Infinity;
+      // Find new targets
       for (let enemy of enemies) {
-        let d = p5.Vector.dist(this.pos, enemy.pos);
-        if (d < this.range && d < minDist) {
-          minDist = d;
-            target = enemy;
+        // Only target fpv and fixed_wing enemies
+        if ((enemy.type === 'fpv' || enemy.type === 'fixed_wing') &&
+            !this.jammingTargets.includes(enemy)) {
+          let d = p5.Vector.dist(this.pos, enemy.pos);
+          if (d < this.range) {
+            this.jammingTargets.push(enemy);
           }
         }
       }
       
-      if (target) {
-        this.shoot(target);
+      // Apply damage to all current targets
+      if (millis() - this.lastShot > this.attackSpeed) {
+        for (let target of this.jammingTargets) {
+          if (target.type === 'fpv' || target.type === 'fixed_wing') {
+            // Create jamming visual effect
+            let effect = new JammingEffect(target.pos.x, target.pos.y, target);
+            projectiles.push(effect);
+            
+            // Slow damage over time
+            target.health -= this.damage;
+            target.hitTime = millis();
+            
+            // Check if enemy is dead
+            if (target.health <= 0) {
+              // Add money reward for killing the enemy
+              money += target.value;
+              gameStats.moneyEarned += target.value;
+              gameStats.enemiesKilled++;
+              
+              // Remove the enemy
+              let index = enemies.indexOf(target);
+              if (index !== -1) {
+                enemies.splice(index, 1);
+              }
+              
+              // Reset selected enemy if it was removed
+              if (selectedEnemy === target) {
+                selectedEnemy = null;
+                if (baseTower) {
+                  baseTower.targeting = false;
+                }
+              }
+            }
+          }
+        }
         this.lastShot = millis();
+      }
+    } else {
+      // Original behavior for other tower types
+      if (millis() - this.lastShot > this.attackSpeed) {
+        let target = null;
+        
+        // Different targeting strategies based on tower type
+        if (this.type === 'sniper') {
+          // Sniper targets the enemy with the highest health
+          let maxHealth = -1;
+          for (let enemy of enemies) {
+            let d = p5.Vector.dist(this.pos, enemy.pos);
+            if (d < this.range && enemy.health > maxHealth) {
+              maxHealth = enemy.health;
+              target = enemy;
+            }
+          }
+        } else {
+          // Other towers target the closest enemy
+          let minDist = Infinity;
+          for (let enemy of enemies) {
+            let d = p5.Vector.dist(this.pos, enemy.pos);
+            if (d < this.range && d < minDist) {
+              minDist = d;
+              target = enemy;
+            }
+          }
+        }
+        
+        if (target) {
+          this.shoot(target);
+          this.lastShot = millis();
+        }
       }
     }
   }
@@ -1120,6 +1565,12 @@ class Tower {
     push(); // Save drawing state
     translate(this.pos.x, this.pos.y);
     
+    // Draw range indicator (lighter for actual towers)
+    noFill();
+    stroke(this.color[0], this.color[1], this.color[2], 30);
+    circle(0, 0, this.range * 2);
+    noStroke();
+    
     // Check if we have an image for this tower type
     if (useImages && towerImages[this.type]) {
       // Use the loaded image
@@ -1129,16 +1580,26 @@ class Tower {
     } else {
       // Fallback to drawing the tower
       if (this.type === 'basic') {
-        // Basic cannon design
+        // Jamming tower design
         // Base
         fill(0, 0, 200);
         circle(0, 0, this.size);
-        // Turret
+        // Antenna structure
         fill(0, 0, 255);
-        rect(-this.size/4, -this.size/3, this.size/2, this.size/1.5);
-        // Barrel
-        fill(50);
-        rect(-this.size/6, -this.size/2, this.size/3, this.size/3);
+        rect(-this.size/12, -this.size/2, this.size/6, this.size/2);
+        // Dish
+        fill(120, 120, 255);
+        arc(0, -this.size/2, this.size/2, this.size/2, PI, TWO_PI);
+        
+        // Signal waves (animated)
+        if (this.jammingTargets.length > 0) {
+          noFill();
+          stroke(100, 100, 255, 100 + 100 * sin(frameCount * 0.2));
+          strokeWeight(1);
+          arc(0, -this.size/2, this.size * 0.8, this.size * 0.8, -PI/3, PI/3);
+          arc(0, -this.size/2, this.size * 1.2, this.size * 1.2, -PI/4, PI/4);
+          strokeWeight(1);
+        }
       } 
       else if (this.type === 'sniper') {
         // Sniper tower design
@@ -1194,12 +1655,6 @@ class Tower {
         }
       }
     }
-    
-    // Range indicator
-    noFill();
-    stroke(this.color[0], this.color[1], this.color[2], 100);
-    circle(0, 0, this.range * 2);
-    noStroke();
     
     pop(); // Restore drawing state
   }
@@ -1392,5 +1847,241 @@ class Projectile {
     }
     
     pop(); // Restore drawing state
+  }
+}
+
+// Draw the base
+function drawBase() {
+  push();
+  translate(base.x, base.y);
+  
+  // Draw base structure
+  fill(100, 100, 200);
+  rectMode(CENTER);
+  rect(0, 0, base.size, base.size);
+  
+  // Draw some details on the base
+  fill(50, 50, 150);
+  rect(0, 0, base.size * 0.7, base.size * 0.7);
+  
+  // Draw defense turret on top
+  fill(150, 150, 220);
+  circle(0, 0, base.size * 0.4);
+  rect(-base.size * 0.1, -base.size * 0.3, base.size * 0.2, base.size * 0.3);
+  
+  // Draw health bar
+  let barWidth = base.size * 1.5;
+  let barHeight = base.size * 0.2;
+  let barY = -base.size * 0.8;
+  
+  // Black background
+  fill(0);
+  rect(0, barY, barWidth, barHeight);
+  
+  // Health bar
+  fill(map(base.health, 0, base.maxHealth, 255, 0), map(base.health, 0, base.maxHealth, 0, 255), 0);
+  let healthWidth = map(base.health, 0, base.maxHealth, 0, barWidth);
+  rect(-barWidth/2 + healthWidth/2, barY, healthWidth, barHeight);
+  
+  pop();
+  rectMode(CORNER); // Reset rect mode
+}
+
+// **BaseTower class** - Special sniper tower that sits on the base
+class BaseTower {
+  constructor(x, y) {
+    this.pos = createVector(x, y);
+    this.type = 'sniper';
+    this.range = towerTypes.sniper.range * 1.5; // Extended range beyond normal sniper
+    this.damage = towerTypes.sniper.damage * 2; // Double damage
+    this.color = towerTypes.sniper.color;
+    this.size = cellSize * 0.8; // Slightly larger than normal towers
+    this.targeting = false; // Flag to indicate if we're currently targeting an enemy
+  }
+  
+  draw() {
+    push(); // Save drawing state
+    translate(this.pos.x, this.pos.y);
+    
+    // Draw range indicator when targeting
+    if (this.targeting) {
+      noFill();
+      stroke(this.color[0], this.color[1], this.color[2], 70);
+      strokeWeight(1);
+      circle(0, 0, this.range * 2);
+    }
+    noStroke();
+    
+    // Special sniper design for the base tower
+    // Base platform
+    fill(50, 50, 100);
+    circle(0, 0, this.size * 0.9);
+    
+    // Tower body
+    fill(180, 0, 0);
+    rect(-this.size/4, -this.size/3, this.size/2, this.size/1.5, 2);
+    
+    // Rotating turret - faces mouse when targeting
+    push();
+    if (this.targeting && mouseX > 0 && mouseY > 0) {
+      let targetAngle = atan2(mouseY - this.pos.y, mouseX - this.pos.x);
+      rotate(targetAngle);
+    }
+    
+    // Long barrel
+    fill(40);
+    rect(0, -this.size/8, this.size/1.2, this.size/4);
+    
+    // Missile launcher
+    fill(70);
+    rect(this.size/3, -this.size/6, this.size/3, this.size/3, 2);
+    
+    // Scope
+    fill(100);
+    circle(this.size/6, 0, this.size/5);
+    fill(200, 0, 0, 150);
+    circle(this.size/6, 0, this.size/10);
+    pop();
+    
+    // Display missile count
+    textAlign(CENTER);
+    textSize(this.size/4);
+    fill(255);
+    text(`Missiles: ${missiles}`, 0, -this.size * 0.9);
+    
+    pop(); // Restore drawing state
+  }
+  
+  // Launch a missile at the target enemy
+  launchMissile(targetEnemy) {
+    if (missiles > 0 && targetEnemy) {
+      // Create a special missile projectile
+      let missile = new Missile(this.pos.x, this.pos.y, targetEnemy, this.damage);
+      projectiles.push(missile);
+      missiles--;
+      
+      // Stay in targeting mode instead of exiting
+      // Only clear the selected enemy
+      selectedEnemy = null;
+    }
+  }
+}
+
+// **Missile class** - Special projectile fired from the base tower
+class Missile extends Projectile {
+  constructor(startX, startY, targetEnemy, damage) {
+    super(startX, startY, targetEnemy, damage, 'sniper', 0);
+    this.speed = 150;
+    this.size = 6;
+    this.color = [255, 50, 50];
+    this.trailLength = 10;
+    this.trailPositions = [];
+    this.damage = damage * 2; // Missiles do double damage
+  }
+  
+  update() {
+    // Store position for trail
+    this.trailPositions.unshift({x: this.pos.x, y: this.pos.y});
+    if (this.trailPositions.length > this.trailLength) {
+      this.trailPositions.pop();
+    }
+    
+    // Use original update logic from Projectile
+    super.update();
+  }
+  
+  draw() {
+    // Draw trail first
+    for (let i = 0; i < this.trailPositions.length; i++) {
+      let pos = this.trailPositions[i];
+      let alpha = map(i, 0, this.trailPositions.length, 200, 0);
+      let size = map(i, 0, this.trailPositions.length, this.size, 1);
+      fill(255, 100, 0, alpha);
+      circle(pos.x, pos.y, size);
+    }
+    
+    // Draw missile body
+    push(); // Save drawing state
+    translate(this.pos.x, this.pos.y);
+    
+    // Calculate angle based on movement direction
+    let angle = 0;
+    if (this.trailPositions.length > 1) {
+      let prev = this.trailPositions[1];
+      angle = atan2(this.pos.y - prev.y, this.pos.x - prev.x);
+    } else if (this.targetEnemy) {
+      angle = atan2(this.targetEnemy.pos.y - this.pos.y, this.targetEnemy.pos.x - this.pos.x);
+    }
+    rotate(angle);
+    
+    // Missile body
+    fill(200, 0, 0);
+    rect(-this.size, -this.size/3, this.size * 1.5, this.size/1.5, 1);
+    
+    // Nose cone
+    fill(150, 0, 0);
+    triangle(this.size/2, -this.size/3, this.size/2, this.size/3, this.size, 0);
+    
+    // Fins
+    fill(100, 0, 0);
+    triangle(-this.size/2, -this.size/3, -this.size, -this.size/2, -this.size/2, 0);
+    triangle(-this.size/2, this.size/3, -this.size, this.size/2, -this.size/2, 0);
+    
+    pop(); // Restore drawing state
+  }
+}
+
+// Add a new class for jamming visual effects
+class JammingEffect {
+  constructor(x, y, targetEnemy) {
+    this.pos = createVector(x, y);
+    this.targetEnemy = targetEnemy;
+    this.lifetime = 15; // Short lifetime for the effect
+    this.size = 10 * scaleFactor;
+    this.color = [50, 50, 255];
+  }
+  
+  update() {
+    // Follow the target enemy
+    if (this.targetEnemy && enemies.includes(this.targetEnemy)) {
+      this.pos.x = this.targetEnemy.pos.x;
+      this.pos.y = this.targetEnemy.pos.y;
+    }
+    
+    // Decrease lifetime
+    this.lifetime--;
+  }
+  
+  draw() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    
+    // Draw disruption effect
+    noFill();
+    stroke(this.color[0], this.color[1], this.color[2], 150 - (15 - this.lifetime) * 10);
+    strokeWeight(1);
+    
+    // Draw broken circles to represent signal disruption
+    for (let i = 0; i < 4; i++) {
+      let angle = random(TWO_PI);
+      let arcLength = random(PI/4, PI);
+      arc(0, 0, this.size * (i+1) * 0.5, this.size * (i+1) * 0.5, angle, angle + arcLength);
+    }
+    
+    // Draw small glitchy lines
+    for (let i = 0; i < 5; i++) {
+      let angle = random(TWO_PI);
+      let len = random(2, 8) * scaleFactor;
+      let x1 = cos(angle) * this.size * 0.6;
+      let y1 = sin(angle) * this.size * 0.6;
+      line(x1, y1, x1 + random(-len, len), y1 + random(-len, len));
+    }
+    
+    pop();
+  }
+  
+  checkCollision() {
+    // Always return true when lifetime is over
+    return this.lifetime <= 0 || !this.targetEnemy || !enemies.includes(this.targetEnemy);
   }
 }

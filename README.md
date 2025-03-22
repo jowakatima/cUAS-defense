@@ -34,11 +34,12 @@ In this tower defense game, you'll defend against different types of unmanned ae
 
 ## Missile System
 
-Your base comes equipped with a special sniper tower that can launch guided missiles:
+Your base comes equipped with a special missile battery that can launch guided missiles:
 - Press `SPACE` to enter targeting mode
 - Click on any enemy to fire a missile
 - Targeting mode persists until you press a tower selection key (1-3)
 - Purchase additional missiles between waves
+- Missiles cause splash damage to nearby enemies
 
 ## Enemy Types
 
@@ -59,7 +60,7 @@ You can add custom sprites for enemies and towers by placing image files in the 
 
 ### Tower Images
 - `images/tower_basic.png` (Jamming Tower)
-- `images/tower_sniper.png`
+- `images/tower_missile_battery.png`
 - `images/tower_rapid.png`
 - `images/tower_splash.png`
 

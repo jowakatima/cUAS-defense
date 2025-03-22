@@ -4,6 +4,7 @@ let base = { x: 0, y: 0, size: 0, health: 100, maxHealth: 100 }; // Base that en
 let enemies = [];
 let towers = [];
 let projectiles = [];
+let explosionEffects = []; // Track explosion particles for visual effects
 let currentWave = 1; // Current wave number
 let maxWaves = 5; // Total number of waves
 let enemiesPerWave = 15; // Increased base enemies per wave for larger map
@@ -22,15 +23,15 @@ let baseSize = 20; // Base unit for scaling
 let cellSize; // Will be calculated based on window size
 let scaleFactor; // Global scale factor for all visual elements
 
-// Sniper tower on base variables
-let baseTower = null; // Will hold the sniper tower placed on the base
+// Missile battery on base variables
+let baseTower = null; // Will hold the missile battery placed on the base
 let missiles = 0; // Number of missiles available for the base tower
 let missilePrice = 25; // Cost per missile
 let selectedEnemy = null; // Currently selected enemy for targeting
 
 let towerTypes = {
   basic: { name: 'Jamming Tower', cost: 50, damage: 1, range: 60 * 2, attackSpeed: 300, color: [0, 0, 255] },
-  sniper: { name: 'Sniper Tower', cost: 100, damage: 15, range: 100 * 3, attackSpeed: 1500, color: [128, 0, 0] },
+  sniper: { name: 'Missile Battery', cost: 100, damage: 15, range: 100 * 3, attackSpeed: 1500, color: [128, 0, 0] },
   rapid: { name: 'Rapid Tower', cost: 75, damage: 2, range: 48, attackSpeed: 300, color: [0, 128, 128] },
   splash: { name: 'Splash Tower', cost: 125, damage: 3, range: 52, attackSpeed: 1000, color: [128, 0, 128], splashRadius: 16 * 3 }
 };
@@ -147,7 +148,7 @@ function setup() {
     }
   }
   
-  // Create the sniper tower on the base
+  // Create the missile battery on the base
   baseTower = new BaseTower(base.x, base.y);
   
   // Start with 5 missiles
@@ -208,6 +209,24 @@ function getRandomSpawnInterval() {
 
 // Main draw loop
 function draw() {
+  // Add drawOutlinedText helper at the beginning of the draw function
+  function drawOutlinedText(txt, x, y, size, mainColor = 255, outlineColor = 0, outlineSize = 1) {
+    push();
+    textSize(size);
+    
+    // Draw outline
+    fill(outlineColor);
+    text(txt, x - outlineSize, y);
+    text(txt, x + outlineSize, y);
+    text(txt, x, y - outlineSize);
+    text(txt, x, y + outlineSize);
+    
+    // Draw main text
+    fill(mainColor);
+    text(txt, x, y);
+    pop();
+  }
+
   if (gameOver) {
     // Only calculate game time once when the game first ends
     if (gameStats.gameTime === 0) {
@@ -312,21 +331,20 @@ function draw() {
     return;
   }
 
-  background(220); // Light gray background
-
-  // Draw the grid
+  // Draw the grid - replace with a solid background
+  background(40, 80, 40); // Dark green background instead of grid
+  
+  // Mark base and tower positions with subtle indicators
   for (let i = 0; i < gridSize; i++) {
     for (let j = 0; j < gridSize; j++) {
-      let x = i * cellSize;
-      let y = j * cellSize;
       if (grid[i][j] === 'base') {
-        fill(100, 100, 200); // Blue for base
-      } else if (grid[i][j] === 'empty') {
-        fill(0, 255, 0); // Green for empty cells
-      } else if (grid[i][j] === 'tower') {
-        fill(0, 0, 255); // Blue for towers (base color)
-      }
-      rect(x, y, cellSize, cellSize);
+        // Draw base area indicator but no grid cell
+        fill(100, 100, 200, 50); // Semi-transparent blue for base
+        let x = i * cellSize;
+        let y = j * cellSize;
+        rect(x, y, cellSize, cellSize);
+      } 
+      // Don't draw anything for empty or tower cells
     }
   }
 
@@ -348,8 +366,8 @@ function draw() {
     rect(width / 2 - 75, height - 50, 150, 40);
     fill(255);
     textAlign(CENTER, CENTER);
-    textSize(16);
-    text("Start Wave " + currentWave, width / 2, height - 30);
+    textSize(18);
+    drawOutlinedText("Start Wave " + currentWave, width / 2, height - 30, 18);
   } else if (waveInProgress) {
   // **Spawn enemies**
   if (enemiesToSpawn > 0 && millis() - lastSpawnTime > spawnInterval) {
@@ -438,6 +456,26 @@ function draw() {
     }
   }
 
+  // **Update and draw explosion effects**
+  for (let i = explosionEffects.length - 1; i >= 0; i--) {
+    let effect = explosionEffects[i];
+    
+    // Update position
+    effect.pos.add(effect.vel);
+    effect.lifetime--;
+    
+    // Draw particle
+    noStroke();
+    let alpha = map(effect.lifetime, 0, 30, 0, 255);
+    fill(effect.color[0], effect.color[1], effect.color[2], alpha);
+    circle(effect.pos.x, effect.pos.y, effect.size * (effect.lifetime / 30));
+    
+    // Remove expired particles
+    if (effect.lifetime <= 0) {
+      explosionEffects.splice(i, 1);
+    }
+  }
+
   // **Highlight cell under mouse for tower placement and show tower preview**
   let mx = floor(mouseX / cellSize);
   let my = floor(mouseY / cellSize);
@@ -447,11 +485,18 @@ function draw() {
     if (mx >= 0 && mx < gridSize && my >= 0 && my < gridSize && grid[mx][my] === 'empty') {
       // Only highlight if we have enough money
       if (money >= towerTypes[selectedTowerType].cost) {
-        fill(255, 255, 0, 100); // Semi-transparent yellow
+        // More visible yellow highlight with border
+        fill(255, 255, 0, 70);
+        stroke(255, 255, 0);
+        strokeWeight(2);
       } else {
-        fill(255, 0, 0, 100); // Semi-transparent red if can't afford
+        // More visible red highlight with border
+        fill(255, 0, 0, 70);
+        stroke(255, 0, 0);
+        strokeWeight(2);
       }
       rect(mx * cellSize, my * cellSize, cellSize, cellSize);
+      noStroke();
       
       // Show tower preview
       let previewX = mx * cellSize + cellSize/2;
@@ -474,30 +519,37 @@ function draw() {
     ellipse(mouseX, mouseY, 30, 30);
     pop();
     
-    // Draw a more prominent message
-    fill(255, 0, 0);
-    stroke(0);
-    strokeWeight(1);
+    // Add a semi-transparent background for better readability
+    fill(0, 0, 0, 150);
+    rect(width / 2 - 200, height - 35, 400, 30, 5);
+    
+    // Use white text with dark outline instead of red
     textAlign(CENTER);
-    textSize(16);
-    text("TARGETING MODE - Click enemy to fire missile", width / 2, height - 20);
-    // Draw a red overlay around the screen edges to indicate special mode
+    textSize(18);
+    drawOutlinedText("TARGETING MODE - Click enemy to fire missile", width / 2, height - 20, 18, 255, 30, 2);
+    
+    // Draw a subtle red border instead of full overlay
     noFill();
-    stroke(255, 0, 0, 100);
-    strokeWeight(5);
-    rect(2, 2, width-4, height-4);
+    stroke(255, 0, 0, 80);
+    strokeWeight(3);
+    rect(5, 5, width-10, height-10, 5);
   }
   
-  // Display game info
-  fill(0);
-  textSize(16);
+  // **Show game HUD with improved visibility**
+  // Add a semi-transparent background
+  fill(0, 0, 0, 100);
+  rect(5, 5, 150, 100, 5);
+  
+  // Use simple text for stats (no outline) for consistent appearance regardless of targeting mode
+  textSize(18);
   textAlign(LEFT);
-  text(`Money: $${money}`, 10, 20);
-  text(`Wave: ${currentWave}/${maxWaves}`, 10, 40);
-  text(`Missiles: ${missiles}`, 10, 60);
+  fill(255);
+  text(`Money: $${money}`, 15, 25);
+  text(`Wave: ${currentWave}/${maxWaves}`, 15, 50);
+  text(`Missiles: ${missiles}`, 15, 75);
   
   if (waveInProgress) {
-    text(`Enemies: ${enemies.length + enemiesToSpawn}`, 10, 80);
+    text(`Enemies: ${enemies.length + enemiesToSpawn}`, 15, 100);
   }
   
   // Draw tower selection UI
@@ -505,10 +557,13 @@ function draw() {
   
   // Only show the space key hint when not in targeting mode
   if (baseTower && missiles > 0 && !waveInProgress && !baseTower.targeting) {
-    fill(100, 100, 255);
+    // Add a semi-transparent background
+    fill(0, 0, 0, 100);
+    rect(width / 2 - 180, height - 95, 360, 30, 5);
+    
     textAlign(CENTER);
-    textSize(14);
-    text("Press SPACE to enter missile targeting mode", width / 2, height - 80);
+    textSize(16);
+    drawOutlinedText("Press SPACE to enter missile targeting mode", width / 2, height - 80, 16, 255, 0, 1);
   }
   
   // Other targeting instructions are now handled in the tower preview section
@@ -521,47 +576,66 @@ function displayMissilePurchaseUI() {
   let boxX = width / 2 - boxWidth / 2;
   let boxY = height / 3 - boxHeight / 2;
   
-  // Background
-  fill(50, 50, 80, 220);
+  // Semi-transparent background for better readability
+  fill(0, 0, 50, 200);
   rect(boxX, boxY, boxWidth, boxHeight, 10);
   
-  // Title
+  function drawOutlinedText(txt, x, y, size, mainColor = 255, outlineColor = 0, outlineSize = 1) {
+    push();
+    textSize(size);
+    
+    // Draw outline
+    fill(outlineColor);
+    text(txt, x - outlineSize, y);
+    text(txt, x + outlineSize, y);
+    text(txt, x, y - outlineSize);
+    text(txt, x, y + outlineSize);
+    
+    // Draw main text
+    fill(mainColor);
+    text(txt, x, y);
+    pop();
+  }
+  
   textAlign(CENTER);
+  
+  // Title
   fill(255);
-  textSize(18);
-  text("Missile Purchase", width / 2, boxY + 25);
+  textSize(20);
+  drawOutlinedText("Missile Purchase", width / 2, boxY + 30, 20);
   
-  // Info text
-  textSize(14);
-  text(`Current Missiles: ${missiles}`, width / 2, boxY + 50);
-  text(`Cost: $${missilePrice} each`, width / 2, boxY + 70);
+  // Current info
+  fill(220);
+  textSize(16);
+  drawOutlinedText(`Current Missiles: ${missiles}`, width / 2, boxY + 60, 16);
+  drawOutlinedText(`Cost: $${missilePrice} each`, width / 2, boxY + 85, 16);
   
-  // Buy 1 button
-  let button1X = boxX + 40;
-  let buttonY = boxY + 100;
+  // Buy buttons
   let buttonWidth = 50;
   let buttonHeight = 30;
+  let button1X = boxX + 40;
+  let button5X = boxX + boxWidth - 40 - buttonWidth;
+  let buttonY = boxY + 100;
   
+  // "Buy 1" button
   if (money >= missilePrice) {
-    fill(0, 150, 0);
+    fill(0, 150, 0);  // Green if can afford
   } else {
-    fill(100, 100, 100);
+    fill(100, 100, 100);  // Gray if cannot afford
   }
   rect(button1X, buttonY, buttonWidth, buttonHeight, 5);
   fill(255);
-  text("Buy 1", button1X + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
+  drawOutlinedText("Buy 1", button1X + buttonWidth / 2, buttonY + buttonHeight / 2 + 5, 14);
   
-  // Buy 5 button
-  let button5X = boxX + boxWidth - 40 - buttonWidth;
-  
+  // "Buy 5" button
   if (money >= missilePrice * 5) {
-    fill(0, 150, 0);
+    fill(0, 150, 0);  // Green if can afford
   } else {
-    fill(100, 100, 100);
+    fill(100, 100, 100);  // Gray if cannot afford
   }
   rect(button5X, buttonY, buttonWidth, buttonHeight, 5);
   fill(255);
-  text("Buy 5", button5X + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
+  drawOutlinedText("Buy 5", button5X + buttonWidth / 2, buttonY + buttonHeight / 2 + 5, 14);
 }
 
 // Function to draw tower preview
@@ -614,7 +688,7 @@ function drawTowerPreview(x, y, towerType) {
       noStroke();
     } 
     else if (towerType === 'sniper') {
-      // Sniper tower design
+      // Missile battery design
       // Base
       fill(128, 0, 0, 180);
       circle(0, 0, cellSize * 0.48);
@@ -673,7 +747,13 @@ function drawTowerPreview(x, y, towerType) {
   stroke(255);
   strokeWeight(2);
   textAlign(CENTER);
-  textSize(cellSize * 0.2);
+  textSize(cellSize * 0.25);
+  text("PREVIEW", 0, -cellSize * 0.8);
+  
+  // Draw text with more contrast
+  strokeWeight(3);
+  stroke(0);
+  fill(255, 255, 0);
   text("PREVIEW", 0, -cellSize * 0.8);
   
   noStroke();
@@ -682,12 +762,40 @@ function drawTowerPreview(x, y, towerType) {
 
 // Draw the tower selection UI
 function drawTowerSelectionUI() {
-  let startX = width - 100;
-  let startY = 10;
-  let spacing = 25;
-  let boxWidth = 90;
-  let boxHeight = 20;
+  let startX = width - 140;
+  let startY = 30;
+  let spacing = 35;
+  let boxWidth = 130;
+  let boxHeight = 30;
+
+  // Helper function for drawing outlined text
+  function drawOutlinedText(txt, x, y, size, mainColor = 255, outlineColor = 0, outlineSize = 1) {
+    push();
+    textSize(size);
+    
+    // Draw outline
+    fill(outlineColor);
+    text(txt, x - outlineSize, y);
+    text(txt, x + outlineSize, y);
+    text(txt, x, y - outlineSize);
+    text(txt, x, y + outlineSize);
+    
+    // Draw main text
+    fill(mainColor);
+    text(txt, x, y);
+    pop();
+  }
   
+  // Draw the title with improved visibility
+  fill(50);
+  rect(startX - 10, 0, boxWidth + 20, startY + (Object.keys(towerTypes).length) * spacing);
+  
+  // Draw the title using simple text (no outline) for consistent appearance
+  textAlign(LEFT);
+  textSize(14);
+  fill(255);
+  text("Tower Types:", startX, startY + 12);
+
   // Count how many tower types we're showing (excluding sniper)
   let visibleTowerCount = 0;
   for (let type in towerTypes) {
@@ -696,15 +804,7 @@ function drawTowerSelectionUI() {
     }
   }
   
-  // Background for tower selection area
-  fill(200, 200, 200, 200);
-  rect(startX - 5, startY - 5, boxWidth + 10, (visibleTowerCount * spacing) + 10);
-  
-  textAlign(LEFT);
-  textSize(10);
-  fill(0);
-  text("Tower Types:", startX, startY + 8);
-  
+  // Draw each tower type
   let index = 0;
   for (let type in towerTypes) {
     // Skip the sniper tower in selection
@@ -713,60 +813,68 @@ function drawTowerSelectionUI() {
     }
     
     let tower = towerTypes[type];
-    let y = startY + 15 + (index * spacing);
+    let y = startY + (index * spacing);
     
+    // Draw a selection box
     if (selectedTowerType === type) {
-      stroke(255, 255, 0);
-      strokeWeight(2);
+      fill(tower.color[0], tower.color[1], tower.color[2], 100); // Highlight selected tower
     } else {
-      stroke(0);
-      strokeWeight(1);
+      fill(200, 200, 200, 100); // Semi-transparent for others
     }
+    rect(startX, y, boxWidth, boxHeight, 5);
     
-    fill(220);
-    rect(startX, y, boxWidth, boxHeight);
-    
-    noStroke();
-    fill(tower.color);
-    
-    // Scaled tower icons
-    if (type === 'basic') {
-      circle(startX + 10, y + boxHeight/2, 12);
-    } else if (type === 'rapid') {
-      circle(startX + 10, y + boxHeight/2, 8);
-      fill(0, 200, 200);
-      for (let i = 0; i < 4; i++) {
-        let angle = i * PI/2;
-        let x1 = startX + 10 + cos(angle) * 6;
-        let y1 = y + boxHeight/2 + sin(angle) * 6;
-        circle(x1, y1, 3);
+    // Draw tower icon
+    if (useImages && towerImages[type]) {
+      imageMode(CENTER);
+      image(towerImages[type], startX + 10, y + boxHeight/2, boxHeight * 0.7, boxHeight * 0.7);
+    } else {
+      // Draw simple icon representing tower type
+      push();
+      noStroke();
+      translate(startX + 10, y + boxHeight/2);
+      scale(0.4);
+      if (type === 'basic') {
+        fill(0, 0, 200);
+        circle(0, 0, 20);
+        fill(100, 100, 255);
+        rect(-2, -12, 4, 12);
+      } else if (type === 'rapid') {
+        fill(0, 128, 128);
+        circle(0, 0, 20);
+        fill(0, 200, 200);
+        rect(-5, -8, 10, 5);
+      } else if (type === 'splash') {
+        fill(128, 0, 128);
+        circle(0, 0, 20);
+        fill(200, 100, 200);
+        circle(0, 0, 12);
       }
-    } else if (type === 'splash') {
-      circle(startX + 10, y + boxHeight/2, 10);
-      fill(200, 100, 200);
-      circle(startX + 10, y + boxHeight/2, 6);
-      circle(startX + 10, y + boxHeight/2, 3);
+      pop();
     }
     
-    noStroke();
-    fill(0);
-    textSize(8);
-    text(`${tower.name} [$${tower.cost}]`, startX + 20, y + 8);
+    // Draw tower name and cost with simple text (no outline) for consistent appearance
+    fill(255);
+    textSize(12);
+    text(`${tower.name} [$${tower.cost}]`, startX + 20, y + 10);
     
-    // Update the keyboard shortcut number for each tower type
+    // Add tower stats with simple text (no outline) for consistent appearance
     let keyNumber = index + 1;
-    text(`DMG: ${tower.damage} [${keyNumber}]`, startX + 20, y + 16);
+    textSize(11);
+    text(`DMG: ${tower.damage} [${keyNumber}]`, startX + 20, y + 22);
     
     index++;
   }
   
   // Add instructions for missile targeting
-  fill(200, 0, 0);
-  textSize(8);
-  text("Press SPACE for missile targeting", startX, startY + 15 + (visibleTowerCount * spacing) + 5);
+  fill(200, 200, 200, 180);
+  rect(startX, startY + 15 + (visibleTowerCount * spacing), boxWidth, 20, 5);
   
-  strokeWeight(1);
-  noStroke();
+  // Use simple text (no outline) for consistent appearance
+  textSize(10);
+  fill(255);
+  textAlign(CENTER);
+  text("Press SPACE for missile targeting", startX + boxWidth/2, startY + 15 + (visibleTowerCount * spacing) + 12);
+  textAlign(LEFT);
 }
 
 // **Handle mouse interactions**
@@ -1527,7 +1635,7 @@ class Tower {
         
         // Different targeting strategies based on tower type
         if (this.type === 'sniper') {
-          // Sniper targets the enemy with the highest health
+          // Missile battery targets the enemy with the highest health
           let maxHealth = -1;
           for (let enemy of enemies) {
             let d = p5.Vector.dist(this.pos, enemy.pos);
@@ -1602,56 +1710,59 @@ class Tower {
         }
       } 
       else if (this.type === 'sniper') {
-        // Sniper tower design
-        // Base
-        fill(128, 0, 0);
-        circle(0, 0, this.size * 0.8);
-        // Tower body
-        fill(160, 0, 0);
-        rect(-this.size/3, -this.size/2, this.size/1.5, this.size/1.2);
-        // Long barrel
-        fill(50);
-        rect(-this.size/6, -this.size, this.size/3, this.size/1.2);
-        // Scope
-        fill(70);
-        circle(0, -this.size/1.2, this.size/4);
+        // High-velocity missile
+        push();
+        let angle = atan2(this.targetEnemy.pos.y - this.pos.y, this.targetEnemy.pos.x - this.pos.x);
+        rotate(angle);
+        // Missile body
+        fill(200, 0, 0);
+        rect(-this.size, -this.size/3, this.size * 2, this.size/2);
+        // Missile tip
+        fill(150, 0, 0);
+        triangle(this.size, -this.size/4, this.size, this.size/4, this.size * 1.5, 0);
+        // Flame trail
+        fill(255, 100, 0, 150);
+        for (let i = 1; i <= 3; i++) {
+          rect(-this.size * (i + 1), -this.size/4 * (1/i), this.size, this.size/2 * (1/i));
+        }
+        pop();
       }
       else if (this.type === 'rapid') {
         // Rapid-fire tower design
         // Rotating base
-        fill(0, 128, 128);
-        circle(0, 0, this.size * 0.7);
+        fill(0, 128, 128, 180);
+        circle(0, 0, cellSize * 0.42);
         // Multiple barrels that rotate
-        fill(0, 160, 160);
+        fill(0, 160, 160, 180);
         for (let i = 0; i < 4; i++) {
           push();
           rotate(i * PI/2 + frameCount/10);
-          rect(-this.size/8, -this.size/2, this.size/4, this.size/2);
+          rect(-cellSize * 0.05, -cellSize * 0.3, cellSize * 0.1, cellSize * 0.3);
           pop();
         }
         // Center hub
-        fill(0, 200, 200);
-        circle(0, 0, this.size * 0.3);
+        fill(0, 200, 200, 180);
+        circle(0, 0, cellSize * 0.18);
       }
       else if (this.type === 'splash') {
-        // Splash tower design
-        // Base
-        fill(128, 0, 128);
-        circle(0, 0, this.size * 0.8);
-        // Energy orb effect with pulsing
-        let pulseSize = sin(frameCount/10) * 0.1 + 1;
-        fill(200, 100, 200, 150);
-        circle(0, 0, this.size * 0.6 * pulseSize);
-        fill(255, 150, 255, 150);
-        circle(0, 0, this.size * 0.4 * pulseSize);
-        // Emitter arrays
-        fill(160, 0, 160);
-        for (let i = 0; i < 3; i++) {
-          push();
-          rotate(i * TWO_PI/3);
-          rect(-this.size/8, -this.size/2, this.size/4, this.size/3);
-          circle(0, -this.size/2, this.size/4);
-          pop();
+        // Plasma orb with pulsing effect
+        let pulseSize = sin(frameCount/5) * 0.2 + 1;
+        // Outer glow
+        fill(255, 0, 255, 50);
+        circle(0, 0, this.size * 2 * pulseSize);
+        // Middle layer
+        fill(255, 0, 255, 100);
+        circle(0, 0, this.size * 1.5 * pulseSize);
+        // Core
+        fill(255, 0, 255);
+        circle(0, 0, this.size * pulseSize);
+        // Energy particles
+        fill(255, 150, 255);
+        for (let i = 0; i < 4; i++) {
+          let angle = (frameCount/2 + i * PI/2);
+          let x = cos(angle) * this.size;
+          let y = sin(angle) * this.size;
+          circle(x, y, this.size/4);
         }
       }
     }
@@ -1660,7 +1771,130 @@ class Tower {
   }
 }
 
-// **Projectile class**
+// Draw the base
+function drawBase() {
+  push();
+  translate(base.x, base.y);
+  
+  // Draw base structure
+  fill(100, 100, 200);
+  rectMode(CENTER);
+  rect(0, 0, base.size, base.size);
+  
+  // Draw some details on the base
+  fill(50, 50, 150);
+  rect(0, 0, base.size * 0.7, base.size * 0.7);
+  
+  // Draw defense turret on top
+  fill(150, 150, 220);
+  circle(0, 0, base.size * 0.4);
+  rect(-base.size * 0.1, -base.size * 0.3, base.size * 0.2, base.size * 0.3);
+  
+  // Draw health bar
+  let barWidth = base.size * 1.5;
+  let barHeight = base.size * 0.2;
+  let barY = -base.size * 0.8;
+  
+  // Black background
+  fill(0);
+  rect(0, barY, barWidth, barHeight);
+  
+  // Health bar
+  fill(map(base.health, 0, base.maxHealth, 255, 0), map(base.health, 0, base.maxHealth, 0, 255), 0);
+  let healthWidth = map(base.health, 0, base.maxHealth, 0, barWidth);
+  rect(-barWidth/2 + healthWidth/2, barY, healthWidth, barHeight);
+  
+  pop();
+  rectMode(CORNER); // Reset rect mode
+}
+
+// **BaseTower class** - Special missile battery that sits on the base
+class BaseTower {
+  constructor(x, y) {
+    this.pos = createVector(x, y);
+    this.type = 'missile_battery';
+    this.range = Infinity; // Unlimited range - can target any enemy on the map
+    this.damage = towerTypes.sniper.damage * 2; // Double damage
+    this.color = towerTypes.sniper.color;
+    this.size = cellSize * 0.8; // Slightly larger than normal towers
+    this.targeting = false; // Flag to indicate if we're currently targeting an enemy
+  }
+  
+  draw() {
+    push(); // Save drawing state
+    translate(this.pos.x, this.pos.y);
+    
+    // No range indicator for missile battery since it has unlimited range
+    
+    noStroke();
+    
+    // Special missile battery design
+    // Base platform
+    fill(50, 50, 100);
+    circle(0, 0, this.size * 0.9);
+    
+    // Tower body
+    fill(180, 0, 0);
+    rect(-this.size/4, -this.size/3, this.size/2, this.size/1.5, 2);
+    
+    // Rotating turret - faces mouse when targeting
+    push();
+    if (this.targeting && mouseX > 0 && mouseY > 0) {
+      let targetAngle = atan2(mouseY - this.pos.y, mouseX - this.pos.x);
+      rotate(targetAngle);
+    }
+    
+    // Missile launcher design
+    fill(40);
+    rect(0, -this.size/8, this.size/1.2, this.size/4);
+    
+    // Missile tubes
+    fill(70);
+    rect(this.size/5, -this.size/4, this.size/3, this.size/2, 2);
+    rect(this.size/2, -this.size/5, this.size/4, this.size/2.5, 2);
+    
+    // Targeting system
+    fill(100);
+    circle(this.size/6, 0, this.size/5);
+    fill(200, 0, 0, 150);
+    circle(this.size/6, 0, this.size/10);
+    pop();
+    
+    // Display missile count
+    textAlign(CENTER);
+    textSize(this.size/3);
+    
+    // Draw outline for better visibility
+    // Black outline
+    fill(0);
+    text(`Missiles: ${missiles}`, 0, -this.size * 0.9 - 1);
+    text(`Missiles: ${missiles}`, 0, -this.size * 0.9 + 1);
+    text(`Missiles: ${missiles}`, -1, -this.size * 0.9);
+    text(`Missiles: ${missiles}`, 1, -this.size * 0.9);
+    
+    // White text
+    fill(255);
+    text(`Missiles: ${missiles}`, 0, -this.size * 0.9);
+    
+    pop(); // Restore drawing state
+  }
+  
+  // Launch a missile at the target enemy
+  launchMissile(targetEnemy) {
+    if (missiles > 0 && targetEnemy) {
+      // Create a special missile projectile with splash damage
+      let missile = new Missile(this.pos.x, this.pos.y, targetEnemy, this.damage);
+      projectiles.push(missile);
+      missiles--;
+      
+      // Stay in targeting mode instead of exiting
+      // Only clear the selected enemy
+      selectedEnemy = null;
+    }
+  }
+}
+
+// **Projectile class** - Base class for all projectiles
 class Projectile {
   constructor(startX, startY, targetEnemy, damage, towerType, splashRadius) {
     this.pos = createVector(startX, startY);
@@ -1669,7 +1903,7 @@ class Projectile {
     this.splashRadius = splashRadius || 0;
     
     if (towerType === 'basic') {
-      this.speed = 120; // Scaled down speeds
+      this.speed = 120;
       this.size = 4;
       this.color = [255, 255, 0];
     } else if (towerType === 'sniper') {
@@ -1836,141 +2070,18 @@ class Projectile {
       // Core
       fill(255, 0, 255);
       circle(0, 0, this.size * pulseSize);
-      // Energy particles
-      fill(255, 150, 255);
-      for (let i = 0; i < 4; i++) {
-        let angle = (frameCount/2 + i * PI/2);
-        let x = cos(angle) * this.size;
-        let y = sin(angle) * this.size;
-        circle(x, y, this.size/4);
-      }
     }
     
     pop(); // Restore drawing state
   }
 }
 
-// Draw the base
-function drawBase() {
-  push();
-  translate(base.x, base.y);
-  
-  // Draw base structure
-  fill(100, 100, 200);
-  rectMode(CENTER);
-  rect(0, 0, base.size, base.size);
-  
-  // Draw some details on the base
-  fill(50, 50, 150);
-  rect(0, 0, base.size * 0.7, base.size * 0.7);
-  
-  // Draw defense turret on top
-  fill(150, 150, 220);
-  circle(0, 0, base.size * 0.4);
-  rect(-base.size * 0.1, -base.size * 0.3, base.size * 0.2, base.size * 0.3);
-  
-  // Draw health bar
-  let barWidth = base.size * 1.5;
-  let barHeight = base.size * 0.2;
-  let barY = -base.size * 0.8;
-  
-  // Black background
-  fill(0);
-  rect(0, barY, barWidth, barHeight);
-  
-  // Health bar
-  fill(map(base.health, 0, base.maxHealth, 255, 0), map(base.health, 0, base.maxHealth, 0, 255), 0);
-  let healthWidth = map(base.health, 0, base.maxHealth, 0, barWidth);
-  rect(-barWidth/2 + healthWidth/2, barY, healthWidth, barHeight);
-  
-  pop();
-  rectMode(CORNER); // Reset rect mode
-}
-
-// **BaseTower class** - Special sniper tower that sits on the base
-class BaseTower {
-  constructor(x, y) {
-    this.pos = createVector(x, y);
-    this.type = 'sniper';
-    this.range = towerTypes.sniper.range * 1.5; // Extended range beyond normal sniper
-    this.damage = towerTypes.sniper.damage * 2; // Double damage
-    this.color = towerTypes.sniper.color;
-    this.size = cellSize * 0.8; // Slightly larger than normal towers
-    this.targeting = false; // Flag to indicate if we're currently targeting an enemy
-  }
-  
-  draw() {
-    push(); // Save drawing state
-    translate(this.pos.x, this.pos.y);
-    
-    // Draw range indicator when targeting
-    if (this.targeting) {
-      noFill();
-      stroke(this.color[0], this.color[1], this.color[2], 70);
-      strokeWeight(1);
-      circle(0, 0, this.range * 2);
-    }
-    noStroke();
-    
-    // Special sniper design for the base tower
-    // Base platform
-    fill(50, 50, 100);
-    circle(0, 0, this.size * 0.9);
-    
-    // Tower body
-    fill(180, 0, 0);
-    rect(-this.size/4, -this.size/3, this.size/2, this.size/1.5, 2);
-    
-    // Rotating turret - faces mouse when targeting
-    push();
-    if (this.targeting && mouseX > 0 && mouseY > 0) {
-      let targetAngle = atan2(mouseY - this.pos.y, mouseX - this.pos.x);
-      rotate(targetAngle);
-    }
-    
-    // Long barrel
-    fill(40);
-    rect(0, -this.size/8, this.size/1.2, this.size/4);
-    
-    // Missile launcher
-    fill(70);
-    rect(this.size/3, -this.size/6, this.size/3, this.size/3, 2);
-    
-    // Scope
-    fill(100);
-    circle(this.size/6, 0, this.size/5);
-    fill(200, 0, 0, 150);
-    circle(this.size/6, 0, this.size/10);
-    pop();
-    
-    // Display missile count
-    textAlign(CENTER);
-    textSize(this.size/4);
-    fill(255);
-    text(`Missiles: ${missiles}`, 0, -this.size * 0.9);
-    
-    pop(); // Restore drawing state
-  }
-  
-  // Launch a missile at the target enemy
-  launchMissile(targetEnemy) {
-    if (missiles > 0 && targetEnemy) {
-      // Create a special missile projectile
-      let missile = new Missile(this.pos.x, this.pos.y, targetEnemy, this.damage);
-      projectiles.push(missile);
-      missiles--;
-      
-      // Stay in targeting mode instead of exiting
-      // Only clear the selected enemy
-      selectedEnemy = null;
-    }
-  }
-}
-
-// **Missile class** - Special projectile fired from the base tower
+// **Missile class** - Special projectile fired from the base tower with splash damage
 class Missile extends Projectile {
   constructor(startX, startY, targetEnemy, damage) {
-    super(startX, startY, targetEnemy, damage, 'sniper', 0);
+    // Set up missile with splash damage radius
+    const splashRadius = 50 * scaleFactor; // Significant splash radius
+    super(startX, startY, targetEnemy, damage, 'splash', splashRadius);
     this.speed = 150;
     this.size = 6;
     this.color = [255, 50, 50];
@@ -2029,6 +2140,71 @@ class Missile extends Projectile {
     
     pop(); // Restore drawing state
   }
+  
+  // Override the checkCollision method to add the explosion effect
+  checkCollision() {
+    if (!this.targetEnemy || this.hasHit) return false;
+    
+    // Check if this missile has hit its target enemy
+    let d = p5.Vector.dist(this.pos, this.targetEnemy.pos);
+    if (d < (this.size/2 + this.targetEnemy.size/2)) {
+      // Hit the enemy
+      this.hasHit = true; // Mark as hit to prevent multiple hits
+      
+      // Apply splash damage to all enemies in radius
+      this.applyExplosion();
+      
+      return true; // Collision occurred, remove projectile
+    }
+    
+    return false; // No collision
+  }
+  
+  // Create a more dramatic explosion effect for missiles
+  applyExplosion() {
+    // Apply damage to all enemies within splash radius
+    for (let enemy of enemies) {
+      let d = p5.Vector.dist(this.pos, enemy.pos);
+      if (d <= this.splashRadius) {
+        // Calculate damage falloff based on distance
+        let damageMultiplier = 1 - (d / this.splashRadius);
+        let actualDamage = this.damage * damageMultiplier;
+        this.applyDamage(enemy, actualDamage);
+      }
+    }
+    
+    // Create explosion animation
+    for (let i = 0; i < 50; i++) {
+      let explosionParticle = {
+        pos: createVector(this.pos.x, this.pos.y),
+        vel: p5.Vector.random2D().mult(random(1, 5) * scaleFactor),
+        size: random(2, 6) * scaleFactor,
+        lifetime: 30,
+        color: [random(200, 255), random(50, 150), 0, 255]
+      };
+      
+      // Add to game's explosion effects array if it exists
+      if (typeof explosionEffects !== 'undefined') {
+        explosionEffects.push(explosionParticle);
+      }
+    }
+    
+    // Visual splash effect
+    push();
+    noStroke();
+    // Inner explosion
+    fill(255, 200, 0, 200);
+    circle(this.pos.x, this.pos.y, this.splashRadius * 0.5);
+    // Outer explosion
+    fill(255, 100, 0, 100);
+    circle(this.pos.x, this.pos.y, this.splashRadius);
+    // Shockwave
+    noFill();
+    strokeWeight(3 * scaleFactor);
+    stroke(255, 255, 255, 150);
+    circle(this.pos.x, this.pos.y, this.splashRadius * 1.2);
+    pop();
+  }
 }
 
 // Add a new class for jamming visual effects
@@ -2039,6 +2215,7 @@ class JammingEffect {
     this.lifetime = 15; // Short lifetime for the effect
     this.size = 10 * scaleFactor;
     this.color = [50, 50, 255];
+    this.hasHit = false; // Add this to match Projectile interface
   }
   
   update() {
@@ -2053,6 +2230,9 @@ class JammingEffect {
   }
   
   draw() {
+    // Don't draw if it has already hit
+    if (this.hasHit) return;
+    
     push();
     translate(this.pos.x, this.pos.y);
     
@@ -2081,7 +2261,11 @@ class JammingEffect {
   }
   
   checkCollision() {
-    // Always return true when lifetime is over
-    return this.lifetime <= 0 || !this.targetEnemy || !enemies.includes(this.targetEnemy);
+    // Mark as hit to ensure it gets removed properly
+    if (this.lifetime <= 0 || !this.targetEnemy || !enemies.includes(this.targetEnemy)) {
+      this.hasHit = true;
+      return true;
+    }
+    return false;
   }
 }

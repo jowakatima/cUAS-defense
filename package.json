@@ -1,11 +1,20 @@
 {
-  "name": "tower-defense-game",
+  "name": "cuas-defense",
   "version": "1.0.0",
-  "description": "A tower defense game where you defend against various drone types",
+  "description": "A modern tower defense game built with P5.js and ES modules",
   "main": "index.html",
   "scripts": {
-    "start": "http-server -c-1 -p 8080"
+    "start": "http-server -p 8080 -c-1",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [
+    "game",
+    "tower-defense",
+    "p5js",
+    "javascript"
+  ],
+  "author": "",
+  "license": "MIT",
   "dependencies": {
     "http-server": "^14.1.1"
   }

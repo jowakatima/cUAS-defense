@@ -33,7 +33,7 @@ let towerTypes = {
   jammer: { name: 'Jamming Tower', cost: 50, damage: 1, range: 60 * 2, attackSpeed: 300, color: [0, 0, 255] },
   missile: { name: 'Missile Battery', cost: 100, damage: 15, range: Infinity, attackSpeed: 1500, color: [128, 0, 0] },
   laser: { name: 'Laser Tower', cost: 75, damage: 8, range: 192, attackSpeed: 3000, color: [0, 200, 255] },
-  hpm: { name: 'HPM Tower', cost: 125, damage: 3, range: 100, attackSpeed: 500, color: [128, 0, 128], coneDegrees: 90, dotDamage: true, splashRadius: 0 }
+  hpm: { name: 'HPM Tower', cost: 125, damage: 5, range: 100, attackSpeed: 500, color: [128, 0, 128], coneDegrees: 90, dotDamage: true, splashRadius: 0 }
 };
 let enemyTypes = {
   'fixed_wing': { speedMod: 1.0, healthMod: 1.0, sizeMod: 1.0, color: [255, 0, 0], shape: 'rect', value: 1.0 },
@@ -329,16 +329,16 @@ function draw() {
 
   // Draw the grid - replace with a solid background
   background(40, 80, 40); // Dark green background instead of grid
-  
+
   // Mark base and tower positions with subtle indicators
   for (let i = 0; i < gridSize; i++) {
     for (let j = 0; j < gridSize; j++) {
       if (grid[i][j] === 'base') {
         // Draw base area indicator but no grid cell
         fill(100, 100, 200, 50); // Semi-transparent blue for base
-        let x = i * cellSize;
-        let y = j * cellSize;
-        rect(x, y, cellSize, cellSize);
+      let x = i * cellSize;
+      let y = j * cellSize;
+      rect(x, y, cellSize, cellSize);
       } 
       // Don't draw anything for empty or tower cells
     }
@@ -476,8 +476,8 @@ function draw() {
   let mx = floor(mouseX / cellSize);
   let my = floor(mouseY / cellSize);
   
-  // Only show tower placement preview if not in targeting mode
-  if (!baseTower || !baseTower.targeting) {
+  // Only show tower placement preview if not in targeting mode and during waves
+  if ((!baseTower || !baseTower.targeting) && waveInProgress) {
     if (mx >= 0 && mx < gridSize && my >= 0 && my < gridSize && grid[mx][my] === 'empty') {
       // Only highlight if we have enough money
       if (money >= towerTypes[selectedTowerType].cost) {
@@ -759,14 +759,14 @@ function drawTowerPreview(x, y, towerType) {
       
       // Microwave emitter dish
       fill(150, 0, 150, 180);
-      push();
+        push();
       rotate(mouseDirection - PI/2); // Rotate dish toward mouse
       ellipse(0, 0, cellSize * 0.4, cellSize * 0.25);
       
       // Dish core
       fill(200, 100, 200, 180);
       ellipse(0, 0, cellSize * 0.25, cellSize * 0.15);
-      pop();
+        pop();
       
       // Energy pulses in cone direction
       noFill();
@@ -802,6 +802,11 @@ function drawTowerPreview(x, y, towerType) {
 
 // Draw the tower selection UI
 function drawTowerSelectionUI() {
+  // Only show tower selection UI during waves
+  if (!waveInProgress) {
+    return;
+  }
+
   let startX = width - 140;
   let startY = 30;
   let spacing = 35;
@@ -870,7 +875,7 @@ function drawTowerSelectionUI() {
     } else {
       // Draw simple icon representing tower type
       push();
-      noStroke();
+    noStroke();
       translate(startX + 10, y + boxHeight/2);
       scale(0.4);
       if (type === 'jammer') {
@@ -881,12 +886,12 @@ function drawTowerSelectionUI() {
       } else if (type === 'laser') {
         fill(0, 128, 128);
         circle(0, 0, 20);
-        fill(0, 200, 200);
+      fill(0, 200, 200);
         rect(-5, -8, 10, 5);
       } else if (type === 'hpm') {
         fill(128, 0, 128);
         circle(0, 0, 20);
-        fill(200, 100, 200);
+      fill(200, 100, 200);
         circle(0, 0, 12);
       }
       pop();
@@ -1008,6 +1013,8 @@ function mousePressed() {
     }
   }
   
+  // Only allow tower selection and placement during waves
+  if (waveInProgress) {
   // Tower selection UI clicks
   let startX = width - 140;
   let startY = 30;
@@ -1016,11 +1023,11 @@ function mousePressed() {
   let boxHeight = 30;
   
   let index = 0;
-  let towerKeys = Object.keys(towerTypes).filter(type => type !== 'missile');
-  
-  for (let i = 0; i < towerKeys.length; i++) {
-    let type = towerKeys[i];
-    let y = startY + (i * spacing);
+    let towerKeys = Object.keys(towerTypes).filter(type => type !== 'missile');
+    
+    for (let i = 0; i < towerKeys.length; i++) {
+      let type = towerKeys[i];
+      let y = startY + (i * spacing);
     
     if (mouseX >= startX && mouseX <= startX + boxWidth && 
         mouseY >= y && mouseY <= y + boxHeight) {
@@ -1033,37 +1040,31 @@ function mousePressed() {
     }
   }
 
-  // Only place towers if not in targeting mode
-  if (!baseTower || !baseTower.targeting) {
-    // Handle tower placement - only allowed during waves
-    if (waveInProgress) {
-      let mx = floor(mouseX / cellSize);
-      let my = floor(mouseY / cellSize);
-      if (mx >= 0 && mx < gridSize && my >= 0 && my < gridSize && grid[mx][my] === 'empty') {
-        // Check if we have enough money
-        let towerType = towerTypes[selectedTowerType];
-        if (money >= towerType.cost) {
-          // Ensure we're not too close to the base
-          let baseGridX = floor(base.x / cellSize);
-          let baseGridY = floor(base.y / cellSize);
-          let tooCloseToBase = (mx >= baseGridX - 1 && mx <= baseGridX + 1 && 
-                              my >= baseGridY - 1 && my <= baseGridY + 1);
-          
-          if (!tooCloseToBase) {
-            let x = mx * cellSize + cellSize/2; // Center of the cell
-            let y = my * cellSize + cellSize/2;
-            let tower = new Tower(x, y, selectedTowerType);
-            towers.push(tower);
-            grid[mx][my] = 'tower';
-            money -= towerType.cost; // Deduct the cost
-            gameStats.towersBuilt++; // Track tower built
+    // Handle tower placement
+    if (!baseTower || !baseTower.targeting) {
+    let mx = floor(mouseX / cellSize);
+    let my = floor(mouseY / cellSize);
+    if (mx >= 0 && mx < gridSize && my >= 0 && my < gridSize && grid[mx][my] === 'empty') {
+      // Check if we have enough money
+      let towerType = towerTypes[selectedTowerType];
+      if (money >= towerType.cost) {
+        // Ensure we're not too close to the base
+        let baseGridX = floor(base.x / cellSize);
+        let baseGridY = floor(base.y / cellSize);
+        let tooCloseToBase = (mx >= baseGridX - 1 && mx <= baseGridX + 1 && 
+                            my >= baseGridY - 1 && my <= baseGridY + 1);
+        
+        if (!tooCloseToBase) {
+          let x = mx * cellSize + cellSize/2; // Center of the cell
+          let y = my * cellSize + cellSize/2;
+          let tower = new Tower(x, y, selectedTowerType);
+          towers.push(tower);
+          grid[mx][my] = 'tower';
+          money -= towerType.cost; // Deduct the cost
+          gameStats.towersBuilt++; // Track tower built
           }
         }
       }
-    } else {
-      // Show message that towers can only be placed during waves
-      message = "Towers can only be placed during waves";
-      messageTime = millis();
     }
   }
 }
@@ -1848,7 +1849,7 @@ class Tower {
         // Signal waves (animated)
         if (this.jammingTargets.length > 0) {
           noFill();
-          for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 3; i++) {
             let alpha = map(sin(frameCount * 0.1 + i), -1, 1, 50, 150);
             stroke(100, 100, 255, alpha);
             let waveSize = this.size/2 + i * this.size/4 + sin(frameCount * 0.05) * this.size/8;
@@ -2302,7 +2303,7 @@ class Missile extends Projectile {
     // Set up missile with splash damage radius
     const splashRadius = 50 * scaleFactor; // Significant splash radius
     super(startX, startY, targetEnemy, damage, 'missile', splashRadius);
-    this.speed = 150;
+    this.speed = 300; // Increased from 150 to 300 for faster missiles
     this.size = 6;
     this.color = [255, 50, 50];
     this.trailLength = 10;

@@ -1,83 +1,100 @@
 # cUAS Defense - Tower Defense Game
 
-A tower defense game where you defend against various drone types by strategically placing defense towers.
+A modern tower defense game built with P5.js and ES modules. Defend your base from waves of enemy drones using various types of defensive towers.
 
-## Game Overview
+## Features
 
-In this tower defense game, you'll defend against different types of unmanned aerial systems (UAS) by strategically placing defense towers along their path. The game features:
+- Four unique tower types:
+  - Jammer Tower: Basic tower with balanced stats
+  - Missile Tower: Slow but powerful with splash damage
+  - Laser Tower: Fast but less powerful
+  - HPM Tower: High-power microwave tower with area damage
 
-- 25x25 grid-based gameplay
-- Multiple tower types with different abilities
-- Various enemy drone types (Fixed Wing, FPV, Group 3, Group 5)
-- Special missile targeting system
-- Dynamic scaling based on window size
-- Wave-based progression with increasing difficulty
-- Money system for purchasing and upgrading towers
+- Multiple enemy types:
+  - Fixed-wing drones
+  - FPV drones
+  - Group 3 drones
+  - Group 5 drones
 
-## How to Play
+- Wave-based gameplay:
+  - Increasing difficulty with each wave
+  - Different enemy types introduced as waves progress
+  - Tower placement restricted to active waves
 
-1. Click on the grid to place towers
-2. Use number keys to select different tower types:
-   - Press `1` for Jamming Tower
-   - Press `2` for Rapid Tower
-   - Press `3` for Splash Tower
-3. Press `SPACE` to enter missile targeting mode (when missiles are available)
-4. Click on enemies while in targeting mode to fire missiles at them
-5. Survive all waves to win
-6. Press 'i' to toggle between drawn sprites and image sprites
+- Modern UI:
+  - Tower preview with range indicators
+  - Health bars for base and enemies
+  - Wave information display
+  - Money and resource management
 
-## Tower Types
+## Installation
 
-- **Jamming Tower**: Specializes in countering FPV and Fixed Wing drones by disrupting their signals and draining health over time. Ineffective against Group 3 and Group 5 drones.
-- **Rapid Tower**: Fast-firing tower with moderate damage, effective against all drone types.
-- **Splash Tower**: Area damage tower that affects multiple enemies in a radius, ideal for clusters.
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/cuas-defense.git
+cd cuas-defense
+```
 
-## Missile System
+2. Install dependencies:
+```bash
+npm install
+```
 
-Your base comes equipped with a special missile battery that can launch guided missiles:
-- Press `SPACE` to enter targeting mode
-- Click on any enemy to fire a missile
-- Targeting mode persists until you press a tower selection key (1-3)
-- Purchase additional missiles between waves
-- Missiles cause splash damage to nearby enemies
+3. Start the development server:
+```bash
+npm start
+```
 
-## Enemy Types
+4. Open your browser and navigate to `http://localhost:8080`
 
-- **Fixed Wing**: Standard drone with balanced stats, vulnerable to jamming
-- **FPV**: Fast but fragile racing drone, vulnerable to jamming
-- **Group 3**: Stealthy flying wing with increased health, resistant to jamming
-- **Group 5**: Heavy, armored boss-type enemy, resistant to jamming
+## Controls
 
-## Custom Sprites
+- Left-click: Select and place towers
+- Spacebar: Start/advance wave
+- Mouse hover: Preview tower placement
+- Click to restart after game over
 
-You can add custom sprites for enemies and towers by placing image files in the `images/` directory:
+## Project Structure
 
-### Enemy Images
-- `images/enemy_fixed_wing.png`
-- `images/enemy_fpv.png`
-- `images/enemy_group_3.png`
-- `images/enemy_group_5.png`
-
-### Tower Images
-- `images/tower_basic.png` (Jamming Tower)
-- `images/tower_missile_battery.png`
-- `images/tower_rapid.png`
-- `images/tower_splash.png`
-
-If an image is not found, the game will automatically fall back to using the programmatically drawn sprites.
-
-## Game Controls
-
-- **1, 2, 3**: Select tower types
-- **SPACE**: Toggle missile targeting mode
-- **Mouse Click**: Place towers or target enemies
-- **i**: Toggle between drawn sprites and image sprites
-- **q**: Test function (spawns an enemy near the base)
+```
+cuas-defense/
+├── src/
+│   ├── config/
+│   │   ├── gameConfig.js
+│   │   └── towerConfig.js
+│   ├── entities/
+│   │   ├── Base.js
+│   │   ├── Enemy.js
+│   │   ├── Projectile.js
+│   │   └── Tower.js
+│   ├── game/
+│   │   ├── GameManager.js
+│   │   └── WaveManager.js
+│   ├── ui/
+│   │   └── TowerButton.js
+│   ├── utils/
+│   │   └── helpers.js
+│   └── sketch.js
+├── images/
+├── index.html
+├── package.json
+└── README.md
+```
 
 ## Development
 
-This game is built using P5.js, a JavaScript library for creative coding. The game features dynamic scaling to fit different screen sizes and detailed sprite designs created programmatically.
+The game is built using:
+- P5.js for graphics and game loop
+- ES modules for code organization
+- Modern JavaScript features
+- Responsive design
 
 ## License
 
-MIT License 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- P5.js team for the amazing creative coding library
+- All contributors and testers
+- The tower defense game community for inspiration 
